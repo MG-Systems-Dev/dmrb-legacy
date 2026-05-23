@@ -75,6 +75,28 @@ _LEGACY_AUTH_SRC = (get_setting("LEGACY_AUTH_SOURCE", "db") or "db").strip().low
 LEGACY_AUTH_SOURCE = _LEGACY_AUTH_SRC if _LEGACY_AUTH_SRC in ("env", "db") else "db"
 AUTH_DISABLED = is_truthy_setting("AUTH_DISABLED")
 
+
+def cors_allowed_origins() -> list[str] | None:
+    """Origins for FastAPI CORSMiddleware. None = do not register CORS (same-origin SPA).
+
+    Set ``CORS_ORIGINS`` to a comma-separated list to allow browser clients on other
+    origins (e.g. Vite on :5173). In non-production, sensible localhost defaults apply
+    when ``CORS_ORIGINS`` is unset so local ``npm run dev`` can call the API on :8000.
+    """
+    raw = (get_setting("CORS_ORIGINS", "") or "").strip()
+    if raw:
+        return [o.strip() for o in raw.split(",") if o.strip()]
+    if IS_PRODUCTION:
+        return None
+    return [
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:8000",
+        "http://127.0.0.1:8000",
+        "http://0.0.0.0:8000",
+    ]
+
+
 OPENAI_API_KEY = get_setting("OPENAI_API_KEY", "") or ""
 OPENAI_CHAT_MODEL = get_setting("OPENAI_CHAT_MODEL", "gpt-4o-mini") or "gpt-4o-mini"
 

@@ -4,6 +4,7 @@ import logging
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Response
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -65,6 +66,17 @@ async def healthz():
 
 app.add_middleware(RequestIDMiddleware)
 app.add_middleware(AuthMiddleware)
+
+_cors_origins = settings.cors_allowed_origins()
+if _cors_origins:
+    # Outermost: answer OPTIONS and attach ACAO before auth runs.
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=_cors_origins,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
 # JSON API routes
 app.include_router(auth.router, prefix="/api", tags=["auth"])

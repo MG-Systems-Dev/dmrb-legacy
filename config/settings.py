@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import os
-from pathlib import Path
 import tomllib
+from pathlib import Path
 from typing import Any
 
 
@@ -63,16 +63,39 @@ def allow_dev_reset_admin_endpoint() -> bool:
         return False
     return APP_ENV in ("development", "dev", "local")
 
+
 if IS_PRODUCTION and SECRET_KEY == _DEFAULT_SECRET_KEY:
     raise RuntimeError(
         "SECRET_KEY must be set to a strong value in production. "
-        "Generate one with: python -c \"import secrets; print(secrets.token_urlsafe(64))\""
+        'Generate one with: python -c "import secrets; print(secrets.token_urlsafe(64))"'
     )
 
 # API auth uses public.app_user only. Kept for Streamlit / legacy: "env" = APP_*, "db" = app_user.
 _LEGACY_AUTH_SRC = (get_setting("LEGACY_AUTH_SOURCE", "db") or "db").strip().lower()
 LEGACY_AUTH_SOURCE = _LEGACY_AUTH_SRC if _LEGACY_AUTH_SRC in ("env", "db") else "db"
 AUTH_DISABLED = is_truthy_setting("AUTH_DISABLED")
+
+
+def cors_allowed_origins() -> list[str] | None:
+    """Origins for FastAPI CORSMiddleware. None = do not register CORS (same-origin SPA).
+
+    Set ``CORS_ORIGINS`` to a comma-separated list to allow browser clients on other
+    origins (e.g. Vite on :5173). In non-production, sensible localhost defaults apply
+    when ``CORS_ORIGINS`` is unset so local ``npm run dev`` can call the API on :8000.
+    """
+    raw = (get_setting("CORS_ORIGINS", "") or "").strip()
+    if raw:
+        return [o.strip() for o in raw.split(",") if o.strip()]
+    if IS_PRODUCTION:
+        return None
+    return [
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:8000",
+        "http://127.0.0.1:8000",
+        "http://0.0.0.0:8000",
+    ]
+
 
 OPENAI_API_KEY = get_setting("OPENAI_API_KEY", "") or ""
 OPENAI_CHAT_MODEL = get_setting("OPENAI_CHAT_MODEL", "gpt-4o-mini") or "gpt-4o-mini"

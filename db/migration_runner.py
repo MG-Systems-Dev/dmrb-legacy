@@ -288,3 +288,20 @@ def ensure_database_ready() -> None:
                 encoding="utf-8"
             )
             cursor.execute(migration_017)
+        # Apply migration 018 (auth claim sessions) if claimed_at column is missing on app_user
+        cursor.execute(
+            """
+            SELECT EXISTS (
+                SELECT 1
+                FROM information_schema.columns
+                WHERE table_schema = 'public'
+                  AND table_name = 'app_user'
+                  AND column_name = 'claimed_at'
+            )
+            """
+        )
+        if not cursor.fetchone()[0]:
+            migration_018 = (_MIGRATIONS_DIR / "018_auth_claim_sessions.sql").read_text(
+                encoding="utf-8"
+            )
+            cursor.execute(migration_018)

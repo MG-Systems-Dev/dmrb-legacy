@@ -1,48 +1,49 @@
 import { api } from "./client";
 import type { AuthUser } from "../stores/useAuth";
 
-/** React Query key for GET /auth/bootstrap-status */
-export const AUTH_BOOTSTRAP_QUERY_KEY = ["bootstrap-status"] as const;
+/** React Query key for GET /auth/setup-status */
+export const AUTH_SETUP_QUERY_KEY = ["setup-status"] as const;
 
-type LoginPayload = {
-  username: string;
-  password: string;
+export type SetupStatus = {
+  needs_setup: boolean;
+  reason: string;
 };
 
-export type BootstrapStatus = {
-  needs_bootstrap: boolean;
-  user_count: number;
-  auth_disabled: boolean;
-  is_production: boolean;
-  allow_api_bootstrap: boolean;
-  reason: string | null;
-};
-
-export async function getBootstrapStatus(): Promise<BootstrapStatus> {
-  const { data } = await api.get<BootstrapStatus>("/auth/bootstrap-status");
+export async function getSetupStatus(): Promise<SetupStatus> {
+  const { data } = await api.get<SetupStatus>("/auth/setup-status");
   return data;
 }
 
-type BootstrapPayload = {
-  username: string;
+export type SetupPayload = {
+  setup_key: string;
+  email: string;
   password: string;
   password_confirm: string;
 };
 
-export async function bootstrapAdmin(payload: BootstrapPayload): Promise<AuthUser> {
-  await api.post("/auth/bootstrap", {
-    username: payload.username,
-    password: payload.password,
-    password_confirm: payload.password_confirm,
-  });
-  const user = await getMe();
-  return user;
+export async function claimSetup(payload: SetupPayload): Promise<AuthUser> {
+  await api.post("/auth/setup", payload);
+  return getMe();
 }
+
+export type RecoveryPayload = {
+  setup_key: string;
+  password: string;
+  password_confirm: string;
+};
+
+export async function recoveryReset(payload: RecoveryPayload): Promise<void> {
+  await api.post("/auth/recovery", payload);
+}
+
+type LoginPayload = {
+  email: string;
+  password: string;
+};
 
 export async function login(payload: LoginPayload): Promise<AuthUser> {
   await api.post("/login", payload);
-  const user = await getMe();
-  return user;
+  return getMe();
 }
 
 export async function logout(): Promise<void> {

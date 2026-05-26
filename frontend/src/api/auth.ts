@@ -4,31 +4,14 @@ import type { AuthUser } from "../stores/useAuth";
 /** React Query key for GET /auth/setup-status */
 export const AUTH_SETUP_QUERY_KEY = ["setup-status"] as const;
 
-/** @deprecated Use AUTH_SETUP_QUERY_KEY */
-export const AUTH_BOOTSTRAP_QUERY_KEY = AUTH_SETUP_QUERY_KEY;
-
 export type SetupStatus = {
   needs_setup: boolean;
   reason: string;
 };
 
-/** @deprecated Use SetupStatus */
-export type BootstrapStatus = SetupStatus & {
-  needs_bootstrap: boolean;
-  user_count: number;
-  auth_disabled: boolean;
-  is_production: boolean;
-  allow_api_bootstrap: boolean;
-};
-
 export async function getSetupStatus(): Promise<SetupStatus> {
   const { data } = await api.get<SetupStatus>("/auth/setup-status");
   return data;
-}
-
-/** @deprecated Use getSetupStatus */
-export async function getBootstrapStatus(): Promise<SetupStatus> {
-  return getSetupStatus();
 }
 
 export type SetupPayload = {

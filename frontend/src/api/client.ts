@@ -30,7 +30,7 @@ api.interceptors.response.use(
       if (path === "/login" || path === "/setup") {
         return Promise.reject(error);
       }
-      if (reqUrl === "/auth/me" || reqUrl === "/auth/bootstrap-status") {
+      if (reqUrl === "/auth/me" || reqUrl === "/auth/setup-status") {
         return Promise.reject(error);
       }
 

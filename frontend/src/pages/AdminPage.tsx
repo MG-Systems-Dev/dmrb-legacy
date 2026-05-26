@@ -29,7 +29,7 @@ export function AdminPage() {
   const [phaseId, setPhaseId] = useState<number | null>(null);
   const [buildingId, setBuildingId] = useState<number | null>(null);
   const [unitId, setUnitId] = useState<number | null>(null);
-  const [newUser, setNewUser] = useState({ username: "", password: "", role: "validator" });
+  const [newUser, setNewUser] = useState({ email: "", password: "", role: "validator" });
 
   useEffect(() => {
     setPhaseId(null);
@@ -86,7 +86,7 @@ export function AdminPage() {
       await api.post("/operations/admin/users", newUser);
     },
     onSuccess: async () => {
-      setNewUser({ username: "", password: "", role: "validator" });
+      setNewUser({ email: "", password: "", role: "validator" });
       await queryClient.invalidateQueries({ queryKey: ["admin-users"] });
       toast.success("User created");
     },
@@ -224,9 +224,32 @@ export function AdminPage() {
                 createUserMutation.mutate();
               }}
             >
-              <input value={newUser.username} onChange={(event) => setNewUser((current) => ({ ...current, username: event.target.value }))} className="input" placeholder="Username" />
-              <input value={newUser.password} onChange={(event) => setNewUser((current) => ({ ...current, password: event.target.value }))} className="input" placeholder="Password" type="password" />
-              <select value={newUser.role} onChange={(event) => setNewUser((current) => ({ ...current, role: event.target.value }))} className="input">
+              <input
+                type="email"
+                value={newUser.email}
+                onChange={(event) => setNewUser((current) => ({ ...current, email: event.target.value }))}
+                className="input"
+                placeholder="Email"
+                required
+              />
+              <div>
+                <input
+                  type="password"
+                  value={newUser.password}
+                  onChange={(event) => setNewUser((current) => ({ ...current, password: event.target.value }))}
+                  className="input"
+                  placeholder="Password (optional)"
+                  autoComplete="new-password"
+                />
+                <p className="mt-1 text-xs text-muted">
+                  Leave blank — user sets their password via the recovery flow.
+                </p>
+              </div>
+              <select
+                value={newUser.role}
+                onChange={(event) => setNewUser((current) => ({ ...current, role: event.target.value }))}
+                className="input"
+              >
                 <option value="validator">validator</option>
                 <option value="admin">admin</option>
               </select>

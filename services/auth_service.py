@@ -1,13 +1,23 @@
 from __future__ import annotations
 
+import hmac
+import logging
+import re
+
 from argon2 import PasswordHasher
 from argon2.exceptions import VerifyMismatchError
 
-from config.settings import AUTH_DISABLED, IS_PRODUCTION, is_truthy_setting
+from config.settings import AUTH_DISABLED, SETUP_KEY
 from db.connection import transaction
 from db.repository import user_repository
 
+logger = logging.getLogger(__name__)
 _hasher = PasswordHasher()
+
+PASSWORD_MIN = 12
+PASSWORD_MAX = 128
+
+_EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", re.IGNORECASE)
 
 
 def hash_password(plain: str) -> str:
@@ -36,72 +46,38 @@ def should_auto_auth() -> bool:
     return bool(AUTH_DISABLED)
 
 
-def get_bootstrap_status_payload() -> dict:
-    """Single source of truth for GET /api/auth/bootstrap-status (and needs_bootstrap())."""
-    allow = is_truthy_setting("ALLOW_API_BOOTSTRAP")
-    try:
-        user_count = user_repository.count_all()
-    except Exception:
-        return {
-            "needs_bootstrap": False,
-            "user_count": -1,
-            "auth_disabled": bool(AUTH_DISABLED),
-            "is_production": bool(IS_PRODUCTION),
-            "allow_api_bootstrap": allow,
-            "reason": "user_count_error",
-        }
-    if AUTH_DISABLED:
-        return {
-            "needs_bootstrap": False,
-            "user_count": user_count,
-            "auth_disabled": True,
-            "is_production": bool(IS_PRODUCTION),
-            "allow_api_bootstrap": allow,
-            "reason": "auth_disabled",
-        }
-    if user_count > 0:
-        return {
-            "needs_bootstrap": False,
-            "user_count": user_count,
-            "auth_disabled": False,
-            "is_production": bool(IS_PRODUCTION),
-            "allow_api_bootstrap": allow,
-            "reason": "users_exist",
-        }
-    if IS_PRODUCTION and not allow:
-        return {
-            "needs_bootstrap": False,
-            "user_count": 0,
-            "auth_disabled": False,
-            "is_production": True,
-            "allow_api_bootstrap": False,
-            "reason": "production_requires_ALLOW_API_BOOTSTRAP",
-        }
-    return {
-        "needs_bootstrap": True,
-        "user_count": 0,
-        "auth_disabled": False,
-        "is_production": bool(IS_PRODUCTION),
-        "allow_api_bootstrap": allow,
-        "reason": None,
-    }
+# ── Setup / claim ─────────────────────────────────────────────────────────────
 
 
-def needs_bootstrap() -> bool:
-    return bool(get_bootstrap_status_payload()["needs_bootstrap"])
+def needs_setup() -> bool:
+    """True when no admin has completed first-time setup via /setup."""
+    return not user_repository.has_claimed_admin()
 
 
-def bootstrap_create_first_admin(username: str, password: str) -> dict:
-    """Create the first admin in ``app_user``. Transaction-safe; raises ValueError if not allowed."""
-    u = (username or "").strip()
-    if not u:
-        raise ValueError("username_required")
+def verify_setup_key(key: str) -> bool:
+    """Timing-safe comparison against the configured SETUP_KEY."""
+    if not SETUP_KEY:
+        return False
+    return hmac.compare_digest(key.encode(), SETUP_KEY.encode())
+
+
+def setup_claim_admin(email: str, password: str) -> dict:
+    """Create the first admin and mark it as claimed. Raises ValueError on conflict."""
+    email = email.strip().lower()
+    if not _EMAIL_RE.match(email):
+        raise ValueError("invalid_email_format")
+    if len(password) < PASSWORD_MIN:
+        raise ValueError("password_too_short")
+    if len(password) > PASSWORD_MAX:
+        raise ValueError("password_too_long")
     with transaction():
         user_repository.acquire_bootstrap_advisory_lock()
-        if user_repository.count_all() > 0:
-            raise ValueError("already_bootstrapped")
+        if user_repository.has_claimed_admin():
+            raise ValueError("already_claimed")
         ph = hash_password(password)
-        row = user_repository.insert(u, ph, "admin")
+        row = user_repository.insert(email, ph, "admin")
+        user_repository.set_claimed_at(row["user_id"])
+    logger.info("setup_success email=%s", email)
     return {
         "user_id": row["user_id"],
         "username": row["username"],
@@ -110,59 +86,100 @@ def bootstrap_create_first_admin(username: str, password: str) -> dict:
     }
 
 
-def _authenticate_db(username: str, password: str) -> dict | None:
-    import logging
-    logger = logging.getLogger(__name__)
-    row = user_repository.get_active_by_username(username)
+def recovery_reset_admin_password(setup_key: str, password: str) -> None:
+    """Reset the claimed admin's password using the SETUP_KEY. Raises ValueError on failure."""
+    if not verify_setup_key(setup_key):
+        logger.warning("recovery_failed reason=invalid_setup_key")
+        raise ValueError("invalid_setup_key")
+    if len(password) < PASSWORD_MIN:
+        raise ValueError("password_too_short")
+    if len(password) > PASSWORD_MAX:
+        raise ValueError("password_too_long")
+    with transaction():
+        # Find the first claimed admin
+        from psycopg2.extras import RealDictCursor
+
+        from db.connection import get_connection
+
+        with get_connection() as conn, conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(
+                """
+                SELECT user_id FROM app_user
+                WHERE role = 'admin' AND claimed_at IS NOT NULL
+                ORDER BY claimed_at
+                LIMIT 1
+                """,
+            )
+            row = cur.fetchone()
+        if row is None:
+            raise ValueError("no_claimed_admin")
+        ph = hash_password(password)
+        user_repository.update_password_hash(row["user_id"], ph)
+    logger.info("recovery_success")
+
+
+# ── Authentication ─────────────────────────────────────────────────────────────
+
+
+def authenticate(email: str, password: str) -> dict | None:
+    """Authenticate against app_user (Argon2). Returns user dict or None.
+
+    Raises ValueError("password_not_set") when the user exists but has no password hash,
+    so the caller can return an actionable error to the client.
+    """
+    if AUTH_DISABLED:
+        return build_bypass_user()
+
+    norm = email.strip().lower()
+    row = user_repository.get_active_by_email(norm)
     if row is None:
-        logger.warning("Auth failed: user '%s' not found", username)
+        logger.warning("login_failure reason=user_not_found")
         return None
+
+    if row["password_hash"] is None:
+        logger.warning("login_failure reason=password_not_set email=%s", norm)
+        raise ValueError("password_not_set")
+
     if not verify_password(row["password_hash"], password):
-        logger.warning("Auth failed: password mismatch for user '%s'", username)
+        logger.warning("login_failure reason=wrong_password")
         return None
+
     role = row["role"]
-    access_mode = "validator_only" if role == "validator" else "full"
+    logger.info("login_success email=%s role=%s", norm, role)
     return {
         "user_id": row["user_id"],
         "username": row["username"],
         "role": role,
-        "access_mode": access_mode,
+        "access_mode": "validator_only" if role == "validator" else "full",
     }
 
 
-def authenticate(username: str, password: str) -> dict | None:
-    """DB-only: authenticate against ``app_user`` (Argon2)."""
-    if AUTH_DISABLED:
-        return build_bypass_user()
-    return _authenticate_db(username, password)
-
-
-def _delete_all_app_users() -> int:
-    return user_repository.delete_all()
+# ── Dev / test utilities ───────────────────────────────────────────────────────
 
 
 def reset_all_users() -> int:
     """Delete all rows in ``app_user``. Returns the number of rows removed."""
     with transaction():
-        return _delete_all_app_users()
+        return user_repository.delete_all()
 
 
 def dev_reset_to_single_admin(username: str, password: str) -> dict:
-    """Remove every ``app_user`` row and create one active admin. Non-production / dev use only.
+    """Remove every app_user row and create one active admin. Dev/test only.
 
-    Password is hashed with Argon2 before persistence. Atomic single transaction.
+    Password is hashed with Argon2. Atomic single transaction.
     """
     u = (username or "").strip()
     if not u:
         raise ValueError("username_required")
     if not (password or "").strip():
         raise ValueError("password_required")
-    if len(password) < 8:
+    if len(password) < PASSWORD_MIN:
         raise ValueError("password_too_short")
     with transaction():
-        _delete_all_app_users()
+        user_repository.delete_all()
         ph = hash_password(password)
         row = user_repository.insert(u, ph, "admin")
+        user_repository.set_claimed_at(row["user_id"])
     return {
         "user_id": row["user_id"],
         "username": row["username"],

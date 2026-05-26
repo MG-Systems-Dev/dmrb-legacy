@@ -3,11 +3,11 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Query
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
-from api.deps import get_current_user
+from api.constants import ANONYMOUS_USER_ID
 from services import property_service, scope_service
 from services.write_guard import WritesDisabledError, check_writes_enabled
 
@@ -50,15 +50,13 @@ def _validate_property_id(property_id: int) -> JSONResponse | None:
 @router.get("/phase-scope")
 def get_phase_scope(
     property_id: int = Query(..., ge=1),
-    user: dict = Depends(get_current_user),
 ):
     err = _validate_property_id(property_id)
     if err is not None:
         return err
 
-    uid = int(user["user_id"])
     try:
-        phase_ids = scope_service.get_phase_scope(uid, property_id)
+        phase_ids = scope_service.get_phase_scope(ANONYMOUS_USER_ID, property_id)
     except Exception as exc:
         logger.exception("phase_scope get: failed")
         return _fail(500, [f"Could not load phase scope: {exc}"])
@@ -69,7 +67,6 @@ def get_phase_scope(
 @router.put("/phase-scope")
 def put_phase_scope(
     body: PutPhaseScopeBody,
-    user: dict = Depends(get_current_user),
 ):
     err = _validate_property_id(body.property_id)
     if err is not None:
@@ -80,9 +77,10 @@ def put_phase_scope(
     except WritesDisabledError as exc:
         return _fail(400, [str(exc)])
 
-    uid = int(user["user_id"])
     try:
-        scope_service.update_phase_scope(uid, body.property_id, body.phase_ids)
+        scope_service.update_phase_scope(
+            ANONYMOUS_USER_ID, body.property_id, body.phase_ids
+        )
     except ValueError as exc:
         return _fail(400, [str(exc)])
     except Exception as exc:
@@ -90,7 +88,7 @@ def put_phase_scope(
         return _fail(500, [f"Could not save phase scope: {exc}"])
 
     try:
-        phase_ids = scope_service.get_phase_scope(uid, body.property_id)
+        phase_ids = scope_service.get_phase_scope(ANONYMOUS_USER_ID, body.property_id)
     except Exception as exc:
         logger.exception("phase_scope put: reload failed")
         return _fail(500, [f"Scope saved but could not reload: {exc}"])

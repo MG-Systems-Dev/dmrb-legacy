@@ -3,9 +3,8 @@ from __future__ import annotations
 import asyncio
 import concurrent.futures
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 
-from api.deps import get_current_user
 from api.schemas.imports import BatchStatusResponse, UploadResponse
 from services import import_service
 
@@ -17,7 +16,6 @@ async def upload_import(
     property_id: int = Form(...),
     report_type: str = Form(...),
     file: UploadFile = File(...),
-    user: dict = Depends(get_current_user),
 ):
     content = await file.read()
 
@@ -72,7 +70,7 @@ async def upload_import(
 
 
 @router.get("/imports/{batch_id}/status", response_model=BatchStatusResponse)
-async def get_import_status(batch_id: int, user: dict = Depends(get_current_user)):
+async def get_import_status(batch_id: int):
     detail = import_service.get_batch_detail(batch_id)
     if not detail:
         raise HTTPException(status_code=404, detail="Batch not found")

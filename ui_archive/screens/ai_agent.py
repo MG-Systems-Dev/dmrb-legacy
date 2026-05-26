@@ -38,7 +38,7 @@ def _load_app_context() -> str | None:
         return None
     try:
         return build_context(
-            property_id, user_id=int(st.session_state.get("user_id") or 0)
+            property_id, user_id=0
         )
     except Exception:
         st.error("Could not load board context. Answering without live data.")

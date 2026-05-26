@@ -43,7 +43,7 @@ def render_property_structure() -> None:
 
 def _render_structure(property_id: int) -> None:
     phases = _load_phases(property_id)
-    uid = int(st.session_state.get("user_id") or 0)
+    uid = 0
     phase_scope_ids = set(scope_service.get_phase_scope(uid, property_id))
     if phase_scope_ids:
         phases = [p for p in phases if p["phase_id"] in phase_scope_ids]
@@ -81,7 +81,7 @@ def _render_structure(property_id: int) -> None:
 
 
 def _render_turnovers(property_id: int) -> None:
-    uid = int(st.session_state.get("user_id") or 0)
+    uid = 0
     phase_scope = scope_service.get_phase_scope(uid, property_id)
     board = board_service.get_board_view(property_id, phase_scope=phase_scope, user_id=uid)
     if not board:

@@ -3,9 +3,9 @@ from __future__ import annotations
 from datetime import date
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Query
 
-from api.deps import get_current_user
+from api.constants import ANONYMOUS_USER_ID
 from api.presentation.formatting import (
     board_breach_row_display,
     display_status_for_board_item,
@@ -27,12 +27,12 @@ async def get_property_board(
     nvm: Optional[str] = Query(None),
     qc: Optional[str] = Query(None),
     board_filter: Optional[str] = Query(None),
-    user: dict = Depends(get_current_user),
 ):
     today = date.today()
-    uid = int(user["user_id"])
     # board_service.get_board_view handles phase_scope reconciliation
-    items = board_service.get_board_view(property_id, today=today, user_id=uid)
+    items = board_service.get_board_view(
+        property_id, today=today, user_id=ANONYMOUS_USER_ID
+    )
 
     if board_filter:
         items = board_service.filter_by_flag_category(items, board_filter)

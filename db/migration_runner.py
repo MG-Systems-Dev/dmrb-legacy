@@ -186,7 +186,8 @@ def ensure_database_ready() -> None:
                 encoding="utf-8"
             )
             cursor.execute(migration_011)
-        # Apply migration 012 (app_user) if the table is missing
+        # Historical auth migration. Run only on fresh installs so 019 can
+        # normalize and drop the auth tables without recreating them every boot.
         cursor.execute(
             """
             SELECT EXISTS (
@@ -197,7 +198,7 @@ def ensure_database_ready() -> None:
             )
             """
         )
-        if not cursor.fetchone()[0]:
+        if not cursor.fetchone()[0] and not initialized:
             migration_012 = (_MIGRATIONS_DIR / "012_app_user.sql").read_text(encoding="utf-8")
             cursor.execute(migration_012)
         # Apply migration 013 (wd_notified_at, wd_installed_at) if the columns are missing
@@ -288,10 +289,16 @@ def ensure_database_ready() -> None:
                 encoding="utf-8"
             )
             cursor.execute(migration_017)
-        # Apply migration 018 (auth claim sessions) if claimed_at column is missing on app_user
+        # Historical auth migration. Existing auth tables are dropped by 019 below.
         cursor.execute(
             """
             SELECT EXISTS (
+                SELECT 1
+                FROM information_schema.tables
+                WHERE table_schema = 'public'
+                  AND table_name = 'app_user'
+            )
+            AND NOT EXISTS (
                 SELECT 1
                 FROM information_schema.columns
                 WHERE table_schema = 'public'
@@ -300,8 +307,24 @@ def ensure_database_ready() -> None:
             )
             """
         )
-        if not cursor.fetchone()[0]:
+        if cursor.fetchone()[0]:
             migration_018 = (_MIGRATIONS_DIR / "018_auth_claim_sessions.sql").read_text(
                 encoding="utf-8"
             )
             cursor.execute(migration_018)
+        # Apply migration 019 (drop auth tables) if either auth table still exists
+        cursor.execute(
+            """
+            SELECT EXISTS (
+                SELECT 1
+                FROM information_schema.tables
+                WHERE table_schema = 'public'
+                  AND table_name IN ('api_session', 'app_user')
+            )
+            """
+        )
+        if cursor.fetchone()[0]:
+            migration_019 = (_MIGRATIONS_DIR / "019_drop_auth_tables.sql").read_text(
+                encoding="utf-8"
+            )
+            cursor.execute(migration_019)

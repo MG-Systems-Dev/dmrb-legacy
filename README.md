@@ -34,18 +34,12 @@ uvicorn api.main:app --reload --host 0.0.0.0 --port 8000
 
 ## Configuration
 
-Copy `.env.example` → `.env` and fill in the three required values before starting locally.
+Copy `.env.example` → `.env` and fill in `DATABASE_URL` before starting locally.
 
 | Variable | Required | Notes |
 |----------|----------|-------|
 | `DATABASE_URL` | ✅ | PostgreSQL connection string |
-| `SECRET_KEY` | ✅ | Session-signing secret — `python3 -c "import secrets; print(secrets.token_urlsafe(64))"` |
-| `SETUP_KEY` | ✅ | First-admin claim key — `python3 -c "import secrets; print(secrets.token_urlsafe(32))"` |
-| `SESSION_SECRET` | — | Alias for `SECRET_KEY`; either name is accepted |
-| `AUTH_DISABLED` | — | `true` bypasses all auth in local dev only; rejected in production |
 | `OPENAI_API_KEY` | — | Required for the AI Agent screen only |
-
-The app exits on startup if `SETUP_KEY` or `SECRET_KEY` is missing.
 
 Full table and architecture rules: **[CLAUDE.md](CLAUDE.md)**. Operator-facing flow diagrams: **[docs/LEGACY_APP_FLOW.md](docs/LEGACY_APP_FLOW.md)**.
 
@@ -74,23 +68,11 @@ This repo ships a `nixpacks.toml` and `railway.json` so Railway can build and ru
    | Variable | Required | Value |
    |---|---|---|
    | `DATABASE_URL` | ✅ | Postgres connection string (auto if using Railway Postgres plugin) |
-   | `SECRET_KEY` | ✅ | Strong random string — `python3 -c "import secrets; print(secrets.token_urlsafe(64))"` |
-   | `SETUP_KEY` | ✅ | First-admin claim key — `python3 -c "import secrets; print(secrets.token_urlsafe(32))"` |
    | `OPENAI_API_KEY` | optional | Only if enabling the AI Agent page |
 
-   Do **not** set `AUTH_DISABLED=true` in production. The app auto-detects Railway via `RAILWAY_ENVIRONMENT_NAME`, enables secure cookies, and exits on boot if `SECRET_KEY` or `SETUP_KEY` is missing or weak.
+   > **`.env` vs Railway Variables:** `.env` is for local dev only and is never deployed to Railway. Set production values in Railway's Variables tab.
 
-   > **`.env` vs Railway Variables:** `.env` is for local dev only and is never deployed to Railway. Set `SECRET_KEY` and `SETUP_KEY` in Railway's Variables tab — they are separate from your local `.env`.
-
-4. **Claim the first admin via the browser.**
-
-   Visit your Railway service URL — you will be redirected to `/setup`. Enter your `SETUP_KEY` and choose an email + password (minimum 12 characters). The app creates the admin row and signs you in immediately.
-
-   **Recovery:** if you ever lose access, visit `/recovery`, enter your `SETUP_KEY`, and set a new password.
-
-   > `scripts/create_app_user.py` is kept for emergency secondary-user creation but is no longer the recommended first-admin path.
-
-5. **Health check.** Railway probes `/healthz` (unauthenticated) — already configured in `railway.json`.
+4. **Health check.** Railway probes `/healthz` — already configured in `railway.json`.
 
 ### What happens on each deploy
 
@@ -109,4 +91,3 @@ This repo ships a `nixpacks.toml` and `railway.json` so Railway can build and ru
 ## License
 
 See the [`LICENSE`](LICENSE) file in the repository root for terms of use.
-

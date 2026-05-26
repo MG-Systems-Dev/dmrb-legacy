@@ -1,7 +1,4 @@
-import { NavLink, useNavigate } from "react-router-dom";
-import { toast } from "sonner";
-import { logout } from "../api/auth";
-import { useAuthStore } from "../stores/useAuth";
+import { NavLink } from "react-router-dom";
 
 const navItems = [
   { to: "/morning-workflow", label: "Morning Workflow" },
@@ -15,25 +12,7 @@ const navItems = [
   { to: "/admin/unit-master", label: "Unit Master" },
 ];
 
-function formatRole(role?: string) {
-  if (!role) return "No role";
-  const normalized = role.toLowerCase().replace(/[_\s-]+/g, " ").trim();
-  if (normalized.includes("admin")) return "Admin";
-  return normalized.charAt(0).toUpperCase() + normalized.slice(1);
-}
-
 export function Sidebar() {
-  const navigate = useNavigate();
-  const user = useAuthStore((state) => state.user);
-  const clearSession = useAuthStore((state) => state.clearSession);
-
-  const handleLogout = async () => {
-    await logout();
-    clearSession();
-    toast.success("Signed out");
-    navigate("/login");
-  };
-
   return (
     <aside className="border-b border-border bg-surface px-5 py-6 text-text lg:min-h-screen lg:border-b-0 lg:border-r">
       <div className="mb-8">
@@ -73,18 +52,6 @@ export function Sidebar() {
         ))}
       </nav>
 
-      <div className="mt-8 rounded-xl border border-border bg-surface-2 p-4 shadow-hairline">
-        <p className="text-[10px] font-medium uppercase tracking-[0.2em] text-muted">
-          {formatRole(user?.role)}
-        </p>
-        <button
-          type="button"
-          onClick={handleLogout}
-          className="btn-ghost mt-4 w-full"
-        >
-          Sign Out
-        </button>
-      </div>
     </aside>
   );
 }

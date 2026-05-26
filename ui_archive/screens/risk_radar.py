@@ -36,7 +36,7 @@ def render_risk_radar() -> None:
 
     st.caption(f"Active Property: **{_property_name(property_id)}**")
 
-    uid = int(st.session_state.get("user_id") or 0)
+    uid = 0
     phase_scope = scope_service.get_phase_scope(uid, property_id)
     cache_key_scope = tuple(sorted(phase_scope))
     rows = _load_risk_dashboard(property_id, uid, cache_key_scope)

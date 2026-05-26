@@ -2,23 +2,8 @@ from __future__ import annotations
 
 import streamlit as st
 
-from ui.auth import require_auth
-
 
 def route_page() -> None:
-    if not require_auth():
-        st.stop()
-        return
-
-    if st.session_state.pop("_validator_access_restricted_notice", False):
-        st.warning("Access restricted to Work Order Validator")
-
-    if st.session_state.get("access_mode") == "validator_only":
-        if st.session_state.get("current_page", "board") != "work_order_validator":
-            st.session_state["current_page"] = "work_order_validator"
-            st.session_state["_validator_access_restricted_notice"] = True
-            st.rerun()
-
     page = st.session_state.get("current_page", "board")
 
     if page == "unit_detail":

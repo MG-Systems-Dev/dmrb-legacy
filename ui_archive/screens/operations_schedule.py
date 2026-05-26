@@ -27,7 +27,7 @@ def render_operations_schedule() -> None:
         st.info("Select a property to view the schedule.")
         return
 
-    uid = int(st.session_state.get("user_id") or 0)
+    uid = 0
     phase_scope = scope_service.get_phase_scope(uid, property_id)
     rows = task_service.get_schedule_rows(property_id, phase_scope=phase_scope, user_id=uid)
     if not rows:

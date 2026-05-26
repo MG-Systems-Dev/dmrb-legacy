@@ -37,10 +37,6 @@ If you have **two folders** (dev clone + production), they are separate apps: **
 | Variable | Default | Purpose |
 |----------|---------|---------|
 | `DATABASE_URL` | — | PostgreSQL connection string |
-| `AUTH_DISABLED` | false | Bypass login in local dev |
-| `LEGACY_AUTH_SOURCE` | `env` | `env` (APP_*/VALIDATOR_* vars) or `db` (Argon2 from `app_user` table) |
-| `APP_USERNAME`, `APP_PASSWORD` | — | Admin credentials when source=env |
-| `VALIDATOR_USERNAME`, `VALIDATOR_PASSWORD` | — | Validator credentials when source=env |
 | `OPENAI_API_KEY` | — | Required for AI agent screen only |
 | `STRICT_IMPORT_REBUILD_ORDER` | false | Fail imports if report type order is violated |
 

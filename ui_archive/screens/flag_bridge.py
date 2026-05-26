@@ -32,7 +32,7 @@ def render_flag_bridge() -> None:
 
     st.caption(f"Active Property: **{_property_name(property_id)}**")
 
-    uid = int(st.session_state.get("user_id") or 0)
+    uid = 0
     phase_scope = scope_service.get_phase_scope(uid, property_id)
     board = _load_board(property_id, uid, tuple(sorted(phase_scope)))
 
@@ -66,7 +66,7 @@ def _render_filter_bar(board: list[dict], property_id: int) -> list[dict]:
         c0, c1, c2, c3, c4, c5 = st.columns(6)
 
         with c0:
-            phase_scope_ids = set(scope_service.get_phase_scope(int(st.session_state.get("user_id") or 0), property_id))
+            phase_scope_ids = set(scope_service.get_phase_scope(0, property_id))
             all_phases = property_service.get_phases(property_id)
             scoped_phases = [p for p in all_phases if p["phase_id"] in phase_scope_ids]
             phase_codes = [p["phase_code"] for p in scoped_phases]

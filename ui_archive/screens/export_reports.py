@@ -50,7 +50,7 @@ def render_export_reports() -> None:
             if st.button("Prepare Export Files", key="export_prepare", width="stretch"):
                 try:
                     today = date.today()
-                    uid = int(st.session_state.get("user_id") or 0)
+                    uid = 0
                     phase_scope = scope_service.get_phase_scope(uid, property_id)
                     board = board_service.get_board(
                         property_id, today=today, phase_scope=phase_scope

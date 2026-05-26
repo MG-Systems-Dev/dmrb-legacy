@@ -2,10 +2,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from api.deps import get_current_user
 from db.repository import unit_repository
 from services.write_guard import check_writes_enabled
 
@@ -21,7 +20,6 @@ class PatchUnitRequest(BaseModel):
 async def patch_unit(
     unit_id: int,
     body: PatchUnitRequest,
-    user: dict = Depends(get_current_user),
 ):
     allowed_fields = {"has_wd_expected"}
     if body.field not in allowed_fields:

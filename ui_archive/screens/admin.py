@@ -1,7 +1,7 @@
-"""Admin screen — control bar, four tabs.
+"""Admin screen — control bar, three tabs.
 
 Control bar: DB Writes toggle, Active Property display, New Property creation.
-Tabs: Add Turnover, Unit Master Import, Phase Manager, App users.
+Tabs: Add Turnover, Unit Master Import, Phase Manager.
 """
 
 from __future__ import annotations
@@ -12,14 +12,12 @@ import pandas as pd
 import streamlit as st
 
 from services import (
-    app_user_service,
     property_service,
     scope_service,
     system_settings_service,
     turnover_service,
     unit_service,
 )
-from services.app_user_service import AppUserError
 from services.turnover_service import TurnoverError
 from services.write_guard import WritesDisabledError
 
@@ -75,12 +73,11 @@ def render_admin() -> None:
         st.caption(f"Active Property: **{_property_name(property_id)}**")
 
     # ── Tabs ─────────────────────────────────────────────────────────────
-    tab_add, tab_unit_master, tab_phases, tab_app_users = st.tabs(
+    tab_add, tab_unit_master, tab_phases = st.tabs(
         [
             "Add Turnover",
             "Unit Master Import",
             "Phase Manager",
-            "App users",
         ]
     )
 
@@ -92,9 +89,6 @@ def render_admin() -> None:
 
     with tab_phases:
         _render_phase_manager(property_id)
-
-    with tab_app_users:
-        _render_app_users()
 
 
 @st.cache_data(ttl=60)
@@ -303,7 +297,7 @@ def _render_phase_manager(property_id: int | None) -> None:
 
         phase_codes = [p["phase_code"] for p in phases]
         phase_id_by_code = {p["phase_code"]: p["phase_id"] for p in phases}
-        uid = int(st.session_state.get("user_id") or 0)
+        uid = 0
         current_phase_ids = scope_service.get_phase_scope(uid, property_id)
         default_codes = [
             p["phase_code"] for p in phases
@@ -384,135 +378,6 @@ def _normalize_unit_columns(df: pd.DataFrame) -> pd.DataFrame:
             df = df.rename(columns={alias: "unit_code"})
             break
     return df
-
-
-def _render_app_users() -> None:
-    """Manage ``app_user`` rows (passwords hashed with Argon2). Used when ``LEGACY_AUTH_SOURCE=db``."""
-    flash = st.session_state.pop("_admin_app_user_flash", None)
-    if flash:
-        kind, text = flash
-        if kind == "success":
-            st.success(text)
-        else:
-            st.error(text)
-
-    st.caption(
-        "These accounts sign in when **LEGACY_AUTH_SOURCE=db**. Passwords are stored as Argon2 hashes only."
-    )
-
-    try:
-        users = app_user_service.list_users()
-    except AppUserError as exc:
-        st.error(str(exc))
-        return
-
-    my_uid = st.session_state.get("user_id")
-
-    with st.container(border=True):
-        st.markdown("**Create user**")
-        with st.form("admin_app_user_create", clear_on_submit=True):
-            c1, c2 = st.columns(2)
-            with c1:
-                new_username = st.text_input("Username", placeholder="e.g. jane")
-            with c2:
-                new_role = st.selectbox("Role", ["admin", "validator"], index=0)
-            np1 = st.text_input("Password", type="password")
-            np2 = st.text_input("Confirm password", type="password")
-            create_sub = st.form_submit_button("Create user")
-        if create_sub:
-            if np1 != np2:
-                st.session_state._admin_app_user_flash = ("error", "Passwords do not match.")
-                st.rerun()
-            try:
-                app_user_service.create_user(new_username, np1, new_role)
-                st.session_state._admin_app_user_flash = ("success", f"Created user **{new_username.strip().lower()}**.")
-                st.rerun()
-            except WritesDisabledError as exc:
-                st.warning(str(exc))
-            except AppUserError as exc:
-                st.session_state._admin_app_user_flash = ("error", str(exc))
-                st.rerun()
-
-    if users:
-        df = pd.DataFrame(users)
-        for col in ("created_at", "updated_at"):
-            if col in df.columns:
-                df[col] = df[col].astype(str)
-        st.dataframe(df, use_container_width=True, hide_index=True)
-    else:
-        st.info("No **app_user** rows yet. Create one above (or use the CLI seed script).")
-
-    for row in users:
-        uid = int(row["user_id"])
-        uname = row["username"]
-        label = f"**{uname}** — {row['role']}, active={row['is_active']}"
-        with st.expander(label):
-            st.caption(f"user_id={uid}")
-            with st.form(f"admin_app_user_pwd_{uid}"):
-                p1 = st.text_input("New password", type="password", key=f"au_p1_{uid}")
-                p2 = st.text_input("Confirm new password", type="password", key=f"au_p2_{uid}")
-                if st.form_submit_button("Update password"):
-                    if p1 != p2:
-                        st.session_state._admin_app_user_flash = ("error", "Passwords do not match.")
-                        st.rerun()
-                    try:
-                        app_user_service.set_password(uid, p1)
-                        st.session_state._admin_app_user_flash = ("success", f"Password updated for **{uname}**.")
-                        st.rerun()
-                    except WritesDisabledError as exc:
-                        st.warning(str(exc))
-                    except AppUserError as exc:
-                        st.session_state._admin_app_user_flash = ("error", str(exc))
-                        st.rerun()
-
-            role_idx = 0 if row["role"] == "admin" else 1
-            with st.form(f"admin_app_user_role_{uid}"):
-                new_role = st.selectbox(
-                    "Role",
-                    ["admin", "validator"],
-                    index=role_idx,
-                    key=f"au_role_{uid}",
-                )
-                if st.form_submit_button("Save role"):
-                    try:
-                        app_user_service.change_role(uid, new_role)
-                        st.session_state._admin_app_user_flash = ("success", f"Role set to **{new_role}** for **{uname}**.")
-                        st.rerun()
-                    except WritesDisabledError as exc:
-                        st.warning(str(exc))
-                    except AppUserError as exc:
-                        st.session_state._admin_app_user_flash = ("error", str(exc))
-                        st.rerun()
-
-            active = bool(row["is_active"])
-            if my_uid is not None and uid == int(my_uid) and active:
-                st.caption("You cannot deactivate your own account here — use another admin if needed.")
-            else:
-                col_a, col_b = st.columns(2)
-                with col_a:
-                    if active:
-                        if st.button("Deactivate", key=f"au_deact_{uid}"):
-                            try:
-                                app_user_service.set_active(uid, False)
-                                st.session_state._admin_app_user_flash = ("success", f"Deactivated **{uname}**.")
-                                st.rerun()
-                            except WritesDisabledError as exc:
-                                st.warning(str(exc))
-                            except AppUserError as exc:
-                                st.session_state._admin_app_user_flash = ("error", str(exc))
-                                st.rerun()
-                with col_b:
-                    if not active:
-                        if st.button("Activate", key=f"au_act_{uid}"):
-                            try:
-                                app_user_service.set_active(uid, True)
-                                st.session_state._admin_app_user_flash = ("success", f"Activated **{uname}**.")
-                                st.rerun()
-                            except WritesDisabledError as exc:
-                                st.warning(str(exc))
-                            except AppUserError as exc:
-                                st.session_state._admin_app_user_flash = ("error", str(exc))
-                                st.rerun()
 
 
 @st.cache_data(ttl=60)

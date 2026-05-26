@@ -121,15 +121,6 @@ export type PropertyStructureResponse = {
   }>;
 };
 
-export type AdminUser = {
-  user_id: number;
-  username: string;
-  role: string;
-  is_active: boolean;
-  created_at: string;
-  updated_at: string;
-};
-
 export type ExportManifest = {
   downloads: Array<{
     key: string;
@@ -202,11 +193,6 @@ async function fetchPropertyStructure(propertyId: number): Promise<PropertyStruc
   return data;
 }
 
-async function fetchAdminUsers(): Promise<AdminUser[]> {
-  const { data } = await api.get<{ rows: AdminUser[] }>("/operations/admin/users");
-  return data.rows;
-}
-
 async function fetchExportManifest(propertyId: number): Promise<ExportManifest> {
   const { data } = await api.get<ExportManifest>(`/operations/exports/${propertyId}/manifest`);
   return data;
@@ -273,14 +259,6 @@ export function usePropertyStructure(propertyId: number | null) {
     queryKey: ["property-structure", propertyId],
     queryFn: () => fetchPropertyStructure(propertyId as number),
     enabled: propertyId !== null,
-  });
-}
-
-export function useAdminUsers(enabled: boolean) {
-  return useQuery({
-    queryKey: ["admin-users"],
-    queryFn: fetchAdminUsers,
-    enabled,
   });
 }
 

@@ -1,10 +1,9 @@
-import { FormEvent, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { api } from "../api/client";
 import {
   useAdminSettings,
-  useAdminUsers,
   usePropertyStructure,
 } from "../api/useOperations";
 import { usePhaseScopeForProperty, usePropertyPhases, useScopedPropertyPhases, useUpdatePhaseScope } from "../api/usePhaseScope";
@@ -13,13 +12,12 @@ import { PropertySelector } from "../components/PropertySelector";
 import { SectionCard } from "../components/SectionCard";
 import { usePropertyStore } from "../stores/useProperty";
 
-type AdminTab = "system" | "turnover" | "structure" | "phases" | "users";
+type AdminTab = "system" | "turnover" | "structure" | "phases";
 
 export function AdminPage() {
   const queryClient = useQueryClient();
   const propertyId = usePropertyStore((state) => state.propertyId);
   const settingsQuery = useAdminSettings(true);
-  const usersQuery = useAdminUsers(true);
   const structureQuery = usePropertyStructure(propertyId);
   const [activeTab, setActiveTab] = useState<AdminTab>("system");
   const [writesEnabled, setWritesEnabled] = useState(false);
@@ -29,7 +27,6 @@ export function AdminPage() {
   const [phaseId, setPhaseId] = useState<number | null>(null);
   const [buildingId, setBuildingId] = useState<number | null>(null);
   const [unitId, setUnitId] = useState<number | null>(null);
-  const [newUser, setNewUser] = useState({ email: "", password: "", role: "validator" });
 
   useEffect(() => {
     setPhaseId(null);
@@ -81,41 +78,17 @@ export function AdminPage() {
     onError: (error) => toast.error(error instanceof Error ? error.message : "Turnover creation failed"),
   });
 
-  const createUserMutation = useMutation({
-    mutationFn: async () => {
-      await api.post("/operations/admin/users", newUser);
-    },
-    onSuccess: async () => {
-      setNewUser({ email: "", password: "", role: "validator" });
-      await queryClient.invalidateQueries({ queryKey: ["admin-users"] });
-      toast.success("User created");
-    },
-    onError: () => toast.error("User create failed"),
-  });
-
-  const updateUserMutation = useMutation({
-    mutationFn: async ({ userId, payload }: { userId: number; payload: Record<string, string | boolean> }) => {
-      await api.patch(`/operations/admin/users/${userId}`, payload);
-    },
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["admin-users"] });
-      toast.success("User updated");
-    },
-    onError: () => toast.error("User update failed"),
-  });
-
   const tabs: Array<{ key: AdminTab; label: string }> = [
     { key: "system", label: "System" },
     { key: "turnover", label: "Add Turnover" },
     { key: "structure", label: "Property Structure" },
     { key: "phases", label: "Phase Manager" },
-    { key: "users", label: "Users" },
   ];
 
   return (
     <PageShell
       title="Admin"
-      description="Manage properties, users, manual turnovers, and system settings."
+      description="Manage properties, manual turnovers, and system settings."
       action={<PropertySelector />}
     >
       <SectionCard title="Admin Tabs">
@@ -213,78 +186,6 @@ export function AdminPage() {
       ) : null}
 
       {activeTab === "phases" ? <PhaseManagerSection propertyId={propertyId} /> : null}
-
-      {activeTab === "users" ? (
-        <div className="grid gap-6 xl:grid-cols-2">
-          <SectionCard title="Create User">
-            <form
-              className="space-y-4"
-              onSubmit={(event: FormEvent<HTMLFormElement>) => {
-                event.preventDefault();
-                createUserMutation.mutate();
-              }}
-            >
-              <input
-                type="email"
-                value={newUser.email}
-                onChange={(event) => setNewUser((current) => ({ ...current, email: event.target.value }))}
-                className="input"
-                placeholder="Email"
-                required
-              />
-              <div>
-                <input
-                  type="password"
-                  value={newUser.password}
-                  onChange={(event) => setNewUser((current) => ({ ...current, password: event.target.value }))}
-                  className="input"
-                  placeholder="Password (optional)"
-                  autoComplete="new-password"
-                />
-                <p className="mt-1 text-xs text-muted">
-                  Leave blank — user sets their password via the recovery flow.
-                </p>
-              </div>
-              <select
-                value={newUser.role}
-                onChange={(event) => setNewUser((current) => ({ ...current, role: event.target.value }))}
-                className="input"
-              >
-                <option value="validator">validator</option>
-                <option value="admin">admin</option>
-              </select>
-              <button type="submit" className="btn-primary">
-                Create User
-              </button>
-            </form>
-          </SectionCard>
-
-          <SectionCard title="Existing Users">
-            <div className="space-y-3">
-              {usersQuery.data?.map((user) => (
-                <div key={user.user_id} className="rounded-xl border border-border bg-surface-2 p-4">
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                      <p className="font-medium text-text-strong">{user.username}</p>
-                      <p className="text-sm text-muted">
-                        {user.role} | {user.is_active ? "active" : "inactive"}
-                      </p>
-                    </div>
-                    <div className="flex gap-2">
-                      <button type="button" onClick={() => updateUserMutation.mutate({ userId: user.user_id, payload: { role: user.role === "admin" ? "validator" : "admin" } })} className="btn-ghost">
-                        Toggle Role
-                      </button>
-                      <button type="button" onClick={() => updateUserMutation.mutate({ userId: user.user_id, payload: { is_active: !user.is_active } })} className="btn-ghost">
-                        {user.is_active ? "Deactivate" : "Activate"}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </SectionCard>
-        </div>
-      ) : null}
     </PageShell>
   );
 }
@@ -338,7 +239,7 @@ function PhaseManagerSection({ propertyId }: { propertyId: number | null }) {
   return (
     <SectionCard
       title="Phase Manager"
-      description="Check the phases to include in the board and related tools for this property, then save. Uses your account’s saved scope on the server."
+      description="Check the phases to include in the board and related tools for this property, then save."
     >
       {loadError ? (
         <p className="text-sm text-rose-400" role="alert">

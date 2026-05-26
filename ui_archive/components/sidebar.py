@@ -48,8 +48,6 @@ def render_sidebar() -> None:
             unsafe_allow_html=True,
         )
 
-        validator_only = st.session_state.get("access_mode") == "validator_only"
-
         # ── Property selector ────────────────────────────────────────────
         properties = property_service.get_all_properties()
         if properties:
@@ -66,59 +64,40 @@ def render_sidebar() -> None:
             )
             st.session_state.property_id = ids[names.index(selected_name)]
         else:
-            if validator_only:
-                st.info("No properties are available. Contact an administrator to add one.")
-            else:
-                st.info("No properties yet — go to **Admin** to create one.")
+            st.info("No properties yet — go to **Admin** to create one.")
 
         st.divider()
 
         # ── Navigation ───────────────────────────────────────────────────
         current_page = st.session_state.get("current_page", "board")
 
-        if validator_only:
-            st.caption("Access: Work Order Validator only")
-            page_key = "work_order_validator"
-            label = "🔧 W/O Validator"
-            is_active = page_key == current_page
-            if st.button(
-                label,
-                key=f"nav_btn_{page_key}",
-                type="primary" if is_active else "secondary",
-                use_container_width=True,
-            ):
-                if page_key != current_page:
-                    st.session_state.current_page = page_key
-                    st.rerun()
-        else:
-            for group_label, expanded, items in _NAV_GROUPS:
-                with st.expander(group_label, expanded=expanded):
-                    for label, page_key in items:
-                        is_active = page_key == current_page
-                        if st.button(
-                            label,
-                            key=f"nav_btn_{page_key}",
-                            type="primary" if is_active else "secondary",
-                            use_container_width=True,
-                        ):
-                            if page_key != current_page:
-                                prev_page = current_page
-                                st.session_state.current_page = page_key
-                                if page_key == "unit_detail" and prev_page != "unit_detail":
-                                    st.session_state.pop("selected_turnover_id", None)
-                                st.rerun()
+        for group_label, expanded, items in _NAV_GROUPS:
+            with st.expander(group_label, expanded=expanded):
+                for label, page_key in items:
+                    is_active = page_key == current_page
+                    if st.button(
+                        label,
+                        key=f"nav_btn_{page_key}",
+                        type="primary" if is_active else "secondary",
+                        use_container_width=True,
+                    ):
+                        if page_key != current_page:
+                            prev_page = current_page
+                            st.session_state.current_page = page_key
+                            if page_key == "unit_detail" and prev_page != "unit_detail":
+                                st.session_state.pop("selected_turnover_id", None)
+                            st.rerun()
 
-            # ── Top Flags ────────────────────────────────────────────────
-            property_id = st.session_state.get("property_id")
-            if property_id is not None:
-                st.divider()
-                _render_top_flags(property_id)
+        # ── Top Flags ────────────────────────────────────────────────
+        property_id = st.session_state.get("property_id")
+        if property_id is not None:
+            st.divider()
+            _render_top_flags(property_id)
 
 
 def _load_flag_units(property_id: int) -> dict[str, list[dict]]:
-    uid = int(st.session_state.get("user_id") or 0)
-    phase_scope = scope_service.get_phase_scope(uid, property_id)
-    return board_service.get_flag_units(property_id, phase_scope=phase_scope, user_id=uid)
+    phase_scope = scope_service.get_phase_scope(0, property_id)
+    return board_service.get_flag_units(property_id, phase_scope=phase_scope, user_id=0)
 
 
 def _render_top_flags(property_id: int) -> None:

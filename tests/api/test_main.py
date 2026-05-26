@@ -9,9 +9,7 @@ from starlette.responses import FileResponse, JSONResponse
 
 
 @pytest.fixture
-def main_module(monkeypatch):
-    monkeypatch.setenv("SETUP_KEY", "test-setup-key")
-    monkeypatch.setenv("SECRET_KEY", "test-secret-key")
+def main_module():
     module = importlib.import_module("api.main")
     return importlib.reload(module)
 

@@ -50,7 +50,7 @@ def render_missing_move_out(property_id: int) -> None:
     )
 
     rows = missing_move_out_service.list_missing_move_outs(
-        property_id, user_id=int(st.session_state.get("user_id") or 0)
+        property_id, user_id=0
     )
 
     if not rows:
@@ -266,7 +266,7 @@ def render_fas_tracker(property_id: int) -> None:
     )
 
     rows = import_service.get_fas_rows(
-        property_id, user_id=int(st.session_state.get("user_id") or 0)
+        property_id, user_id=0
     )
 
     if not rows:

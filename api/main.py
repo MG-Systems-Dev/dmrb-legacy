@@ -9,16 +9,10 @@ from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
-from slowapi import _rate_limit_exceeded_handler
-from slowapi.errors import RateLimitExceeded
 
-from api.middleware.auth import AuthMiddleware
 from api.middleware.request_id import RequestIDMiddleware
-from api.rate_limit import limiter
 from api.routers import (
-    auth,
     board,
-    dev,
     health,
     imports,
     notes,
@@ -30,16 +24,11 @@ from api.routers import (
     unit_master,
     units,
 )
-from api.schemas.auth import LoginRequest
-from api.session_store import clear_session, create_session
 from config import settings
-from services import auth_service
 
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title="DMRB Legacy API")
-app.state.limiter = limiter
-app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 
 @app.on_event("startup")
@@ -53,7 +42,6 @@ async def _apply_migrations() -> None:
     unreachable.
     """
     from db.migration_runner import ensure_database_ready
-    from db.repository import session_repository
 
     db_url = os.getenv("DATABASE_URL", "")
     if db_url:
@@ -76,9 +64,6 @@ async def _apply_migrations() -> None:
         ensure_database_ready()
         elapsed_ms = (time.monotonic() - started) * 1000
         logger.info("Database migrations applied successfully (%.0f ms)", elapsed_ms)
-        deleted = session_repository.delete_expired()
-        if deleted:
-            logger.info("Cleaned up %d expired sessions", deleted)
     except Exception as exc:
         elapsed_ms = (time.monotonic() - started) * 1000
         logger.error(
@@ -146,11 +131,9 @@ async def _unhandled_exception_handler(request: Request, exc: Exception) -> JSON
 
 
 app.add_middleware(RequestIDMiddleware)
-app.add_middleware(AuthMiddleware)
 
 _cors_origins = settings.cors_allowed_origins()
 if _cors_origins:
-    # Outermost: answer OPTIONS and attach ACAO before auth runs.
     app.add_middleware(
         CORSMiddleware,
         allow_origins=_cors_origins,
@@ -158,12 +141,6 @@ if _cors_origins:
         allow_methods=["*"],
         allow_headers=["*"],
     )
-
-# JSON API routes
-app.include_router(auth.router, prefix="/api", tags=["auth"])
-
-if settings.allow_dev_reset_admin_endpoint():
-    app.include_router(dev.router, prefix="/api")
 
 app.include_router(health.router, prefix="/api", tags=["health"])
 app.include_router(board.router, prefix="/api", tags=["board"])
@@ -222,34 +199,6 @@ def serve_spa_routes(full_path: str) -> FileResponse:
     if not FRONTEND_INDEX.is_file():
         raise HTTPException(status_code=404, detail="Frontend build not available")
     return FileResponse(FRONTEND_INDEX, media_type="text/html")
-
-
-@app.post("/api/login", tags=["auth"])
-@limiter.limit("20/15minutes")
-async def api_login(request: Request, body: LoginRequest, response: Response):
-    """JSON login endpoint for the SPA."""
-    try:
-        result = auth_service.authenticate(body.email, body.password)
-    except ValueError as exc:
-        if str(exc) == "password_not_set":
-            raise HTTPException(
-                status_code=401,
-                detail="Password has not been set yet. Ask an admin or use the recovery flow.",
-            ) from exc
-        raise HTTPException(status_code=401, detail="Invalid email or password.") from exc
-
-    if not result:
-        raise HTTPException(status_code=401, detail="Invalid email or password.")
-
-    create_session(response, result)
-    return {"status": "ok"}
-
-
-@app.post("/api/logout", tags=["auth"])
-async def api_logout(request: Request, response: Response):
-    """JSON logout endpoint for the SPA."""
-    clear_session(request, response)
-    return {"status": "ok"}
 
 
 @app.exception_handler(404)

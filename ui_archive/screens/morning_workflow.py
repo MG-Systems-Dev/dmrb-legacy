@@ -212,7 +212,7 @@ def render_morning_workflow() -> None:
     st.caption(f"Active Property: **{_property_name(property_id)}**")
 
     today = date.today()
-    uid = int(st.session_state.get("user_id") or 0)
+    uid = 0
     phase_scope = scope_service.get_phase_scope(uid, property_id)
 
     # ── Top actions (compose from board summary + missing move-out queue) ─

@@ -63,8 +63,8 @@ type ScopedPropertyPhasesResult = {
 
 /**
  * Single source for phase dropdowns: `usePropertyPhases` filtered by
- * `usePhaseScopeForProperty` `phase_ids`. If the user has no separate scope row, the
- * server returns all phase ids, so the result is the full catalog. While either query
+ * `usePhaseScopeForProperty` `phase_ids`. If no saved scope row exists, the server
+ * returns all phase ids, so the result is the full catalog. While either query
  * is loading, `filteredPhases` is `undefined`.
  */
 export function useScopedPropertyPhases(propertyId: number | null): ScopedPropertyPhasesResult {

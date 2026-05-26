@@ -3,10 +3,10 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Any, Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from api.deps import get_current_user
+from api.constants import DEFAULT_ACTOR
 from api.presentation.formatting import status_label
 from domain.availability_status import (
     MANUAL_READY_ON_NOTICE,
@@ -79,7 +79,7 @@ def _status_payload(status_label: str) -> dict[str, str]:
 
 
 @router.get("/turnovers/{turnover_id}")
-async def get_turnover(turnover_id: int, user: dict = Depends(get_current_user)):
+async def get_turnover(turnover_id: int):
     detail = turnover_service.get_turnover_detail(turnover_id)
     if detail is None:
         raise HTTPException(status_code=404, detail="Turnover not found")
@@ -87,7 +87,7 @@ async def get_turnover(turnover_id: int, user: dict = Depends(get_current_user))
 
 
 @router.get("/turnovers/{turnover_id}/detail")
-async def get_turnover_detail(turnover_id: int, user: dict = Depends(get_current_user)):
+async def get_turnover_detail(turnover_id: int):
     detail = unit_service.get_unit_detail(turnover_id)
     if detail is None:
         raise HTTPException(status_code=404, detail="Turnover not found")
@@ -96,7 +96,7 @@ async def get_turnover_detail(turnover_id: int, user: dict = Depends(get_current
 
 
 @router.get("/turnovers/{turnover_id}/authority")
-async def get_turnover_authority(turnover_id: int, user: dict = Depends(get_current_user)):
+async def get_turnover_authority(turnover_id: int):
     detail = turnover_service.get_turnover_detail(turnover_id)
     if detail is None:
         raise HTTPException(status_code=404, detail="Turnover not found")
@@ -142,7 +142,6 @@ async def get_turnover_authority(turnover_id: int, user: dict = Depends(get_curr
 async def create_turnover(
     body: CreateTurnoverRequest,
     property_id: int,
-    user: dict = Depends(get_current_user),
 ):
     try:
         t = turnover_service.create_turnover(
@@ -150,7 +149,7 @@ async def create_turnover(
             body.unit_id,
             body.move_out_date,
             move_in_date=body.move_in_date,
-            actor=user.get("username", "api"),
+            actor=DEFAULT_ACTOR,
         )
         return _serialize(t)
     except TurnoverError as exc:
@@ -161,7 +160,6 @@ async def create_turnover(
 async def patch_turnover(
     turnover_id: int,
     body: PatchTurnoverRequest,
-    user: dict = Depends(get_current_user),
 ):
     allowed_fields = {
         "move_out_date",
@@ -185,7 +183,7 @@ async def patch_turnover(
             payload = {body.field: body.value}
         updated = turnover_service.update_turnover(
             turnover_id,
-            actor=user.get("username", "api"),
+            actor=DEFAULT_ACTOR,
             source="api",
             **payload,
         )
@@ -198,13 +196,12 @@ async def patch_turnover(
 async def cancel_turnover(
     turnover_id: int,
     body: CancelTurnoverRequest,
-    user: dict = Depends(get_current_user),
 ):
     try:
         updated = turnover_service.cancel_turnover(
             turnover_id,
             body.reason,
-            actor=user.get("username", "api"),
+            actor=DEFAULT_ACTOR,
         )
         return _serialize(updated)
     except TurnoverError as exc:
@@ -212,47 +209,47 @@ async def cancel_turnover(
 
 
 @router.get("/turnovers/{turnover_id}/audit")
-async def get_turnover_audit(turnover_id: int, user: dict = Depends(get_current_user)):
+async def get_turnover_audit(turnover_id: int):
     rows = audit_service.get_turnover_history(turnover_id)
     return [_serialize(r) for r in rows]
 
 
 # W/D workflow actions
 @router.post("/turnovers/{turnover_id}/wd/notify")
-async def wd_notify(turnover_id: int, user: dict = Depends(get_current_user)):
+async def wd_notify(turnover_id: int):
     try:
         return _serialize(
-            turnover_service.mark_wd_notified(turnover_id, actor=user.get("username", "api"))
+            turnover_service.mark_wd_notified(turnover_id, actor=DEFAULT_ACTOR)
         )
     except TurnoverError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 
 
 @router.post("/turnovers/{turnover_id}/wd/install")
-async def wd_install(turnover_id: int, user: dict = Depends(get_current_user)):
+async def wd_install(turnover_id: int):
     try:
         return _serialize(
-            turnover_service.mark_wd_installed(turnover_id, actor=user.get("username", "api"))
+            turnover_service.mark_wd_installed(turnover_id, actor=DEFAULT_ACTOR)
         )
     except TurnoverError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 
 
 @router.delete("/turnovers/{turnover_id}/wd/notify")
-async def wd_undo_notify(turnover_id: int, user: dict = Depends(get_current_user)):
+async def wd_undo_notify(turnover_id: int):
     try:
         return _serialize(
-            turnover_service.undo_wd_notified(turnover_id, actor=user.get("username", "api"))
+            turnover_service.undo_wd_notified(turnover_id, actor=DEFAULT_ACTOR)
         )
     except TurnoverError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 
 
 @router.delete("/turnovers/{turnover_id}/wd/install")
-async def wd_undo_install(turnover_id: int, user: dict = Depends(get_current_user)):
+async def wd_undo_install(turnover_id: int):
     try:
         return _serialize(
-            turnover_service.undo_wd_installed(turnover_id, actor=user.get("username", "api"))
+            turnover_service.undo_wd_installed(turnover_id, actor=DEFAULT_ACTOR)
         )
     except TurnoverError as exc:
         raise HTTPException(status_code=400, detail=str(exc))

@@ -28,7 +28,7 @@ def render_import_console() -> None:
         return
 
     missing_move_out_service.reconcile_pending_move_ins(
-        property_id, user_id=int(st.session_state.get("user_id") or 0)
+        property_id, user_id=0
     )
 
     with st.container(border=True):

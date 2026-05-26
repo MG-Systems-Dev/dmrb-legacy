@@ -1,18 +1,13 @@
 import { createBrowserRouter, Navigate, Outlet } from "react-router-dom";
-import { RequireAuth } from "./components/RequireAuth";
 import { Sidebar } from "./components/Sidebar";
 import { AdminPage } from "./pages/AdminPage";
 import { AiAgentPage } from "./pages/AiAgentPage";
 import { BoardPage } from "./pages/BoardPage";
 import { FlagBridgePage } from "./pages/FlagBridgePage";
-import { LoginPage } from "./pages/LoginPage";
 import { MorningWorkflowPage } from "./pages/MorningWorkflowPage";
 import { OperationsSchedulePage } from "./pages/OperationsSchedulePage";
-import { ClaimPage } from "./pages/ClaimPage";
-import { RecoveryPage } from "./pages/RecoveryPage";
 import { ReportOperationsPage } from "./pages/ReportOperationsPage";
 import { RiskRadarPage } from "./pages/RiskRadarPage";
-import { SetupPage } from "./pages/SetupPage";
 import { TurnoverDetailPage } from "./pages/TurnoverDetailPage";
 import { UnitMasterPage } from "./pages/UnitMasterPage";
 
@@ -29,27 +24,7 @@ function AppLayout() {
 
 export const router = createBrowserRouter([
   {
-    path: "/login",
-    element: <LoginPage />,
-  },
-  {
-    path: "/setup",
-    element: <SetupPage />,
-  },
-  {
-    path: "/recovery",
-    element: <RecoveryPage />,
-  },
-  {
-    path: "/claim",
-    element: <ClaimPage />,
-  },
-  {
-    element: (
-      <RequireAuth>
-        <AppLayout />
-      </RequireAuth>
-    ),
+    element: <AppLayout />,
     children: [
       { index: true, element: <Navigate to="/board" replace /> },
       { path: "/morning-workflow", element: <MorningWorkflowPage /> },

@@ -6,11 +6,10 @@ from io import BytesIO, StringIO
 from typing import Any
 
 import pandas as pd
-from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
+from fastapi import APIRouter, File, Form, Query, UploadFile
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
-from api.deps import get_current_user
 from services import property_service, unit_service
 from services.unit_master_import_plan import (
     build_unit_master_import_report,
@@ -226,7 +225,6 @@ async def import_unit_master_csv(
     strict: bool = Form(False),
     dry_run: bool = Form(False),
     file: UploadFile = File(...),
-    user: dict = Depends(get_current_user),
 ):
     prop_err = _validate_property_id(property_id)
     if prop_err is not None:
@@ -322,7 +320,6 @@ async def import_unit_master_csv(
 async def list_property_units(
     property_id: int = Query(..., ge=1),
     active_only: bool = Query(True),
-    user: dict = Depends(get_current_user),
 ):
     prop_err = _validate_property_id(property_id)
     if prop_err is not None:
@@ -341,7 +338,6 @@ async def list_property_units(
 async def create_unit_manual(
     body: CreateUnitBody,
     property_id: int = Query(..., ge=1),
-    user: dict = Depends(get_current_user),
 ):
     prop_err = _validate_property_id(property_id)
     if prop_err is not None:

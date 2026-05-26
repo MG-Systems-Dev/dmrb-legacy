@@ -6,13 +6,12 @@ import logging
 from datetime import date, datetime
 from typing import Any
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Response, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, Response, UploadFile
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from api.deps import get_current_user
+from api.constants import ANONYMOUS_USER_ID, DEFAULT_ACTOR
 from services import (
-    app_user_service,
     board_service,
     import_service,
     property_service,
@@ -26,7 +25,6 @@ from services.ai.ai_agent_chat_service import (
     complete_chat,
 )
 from services.ai.ai_agent_context import build_context
-from services.app_user_service import AppUserError
 from services.exports import export_chart, export_excel, export_service
 from services.report_operations import missing_move_out_service, override_conflict_service
 from services.turnover_service import TurnoverError
@@ -48,11 +46,6 @@ def _serialize(value: Any) -> Any:
     return value
 
 
-def _require_admin(user: dict) -> None:
-    if user.get("role") != "admin":
-        raise HTTPException(status_code=403, detail="Admin access required")
-
-
 class ResolveMissingMoveOutRequest(BaseModel):
     unit_id: int
     move_out_date: date
@@ -71,23 +64,10 @@ class CreatePropertyRequest(BaseModel):
     name: str
 
 
-class CreateUserRequest(BaseModel):
-    email: str
-    role: str
-    password: str | None = None
-
-
-class UpdateUserRequest(BaseModel):
-    role: str | None = None
-    is_active: bool | None = None
-    password: str | None = None
-
-
 @router.get("/operations/workflow/{property_id}")
-async def get_workflow_summary(property_id: int, user: dict = Depends(get_current_user)):
+async def get_workflow_summary(property_id: int):
     today = date.today()
-    uid = int(user["user_id"])
-    scope_ids = scope_service.get_phase_scope(uid, property_id)
+    scope_ids = scope_service.get_phase_scope(ANONYMOUS_USER_ID, property_id)
     board = board_service.get_board(property_id, today=today, phase_scope=scope_ids)
     summary = board_service.get_board_summary(
         property_id, today=today, phase_scope=scope_ids, board=board
@@ -102,7 +82,9 @@ async def get_workflow_summary(property_id: int, user: dict = Depends(get_curren
         property_id, today=today, phase_scope=scope_ids
     )
     import_timestamps = import_service.get_latest_import_timestamps(property_id)
-    missing_move_outs = missing_move_out_service.list_missing_move_outs(property_id, user_id=uid)
+    missing_move_outs = missing_move_out_service.list_missing_move_outs(
+        property_id, user_id=ANONYMOUS_USER_ID
+    )
     return _serialize(
         {
             "today": today,
@@ -117,29 +99,29 @@ async def get_workflow_summary(property_id: int, user: dict = Depends(get_curren
 
 
 @router.get("/operations/risk/{property_id}")
-async def get_risk_dashboard(property_id: int, user: dict = Depends(get_current_user)):
+async def get_risk_dashboard(property_id: int):
     rows = risk_service.get_risk_dashboard(
-        property_id, today=date.today(), user_id=int(user["user_id"])
+        property_id, today=date.today(), user_id=ANONYMOUS_USER_ID
     )
     rows.sort(key=lambda row: row["risk_score"], reverse=True)
     return _serialize({"rows": rows})
 
 
 @router.get("/operations/flag-bridge/{property_id}")
-async def get_flag_bridge(property_id: int, user: dict = Depends(get_current_user)):
+async def get_flag_bridge(property_id: int):
     board = board_service.get_board_view(
-        property_id, today=date.today(), user_id=int(user["user_id"])
+        property_id, today=date.today(), user_id=ANONYMOUS_USER_ID
     )
     metrics = board_service.get_flag_bridge_metrics(board)
     return _serialize({"rows": board, "metrics": metrics})
 
 
 @router.get("/operations/report-operations/{property_id}/missing-move-outs")
-async def get_missing_move_outs(property_id: int, user: dict = Depends(get_current_user)):
+async def get_missing_move_outs(property_id: int):
     return _serialize(
         {
             "rows": missing_move_out_service.list_missing_move_outs(
-                property_id, user_id=int(user["user_id"])
+                property_id, user_id=ANONYMOUS_USER_ID
             )
         }
     )
@@ -150,7 +132,6 @@ async def resolve_missing_move_out(
     property_id: int,
     row_id: int,
     body: ResolveMissingMoveOutRequest,
-    user: dict = Depends(get_current_user),
 ):
     try:
         turnover = missing_move_out_service.resolve_missing_move_out(
@@ -159,7 +140,7 @@ async def resolve_missing_move_out(
             unit_id=body.unit_id,
             move_out_date=body.move_out_date,
             move_in_date=body.move_in_date,
-            actor=user.get("username", "api"),
+            actor=DEFAULT_ACTOR,
         )
     except (TurnoverError, WritesDisabledError) as exc:
         raise HTTPException(status_code=400, detail=str(exc))
@@ -167,9 +148,9 @@ async def resolve_missing_move_out(
 
 
 @router.get("/operations/report-operations/{property_id}/fas")
-async def get_fas_rows(property_id: int, user: dict = Depends(get_current_user)):
+async def get_fas_rows(property_id: int):
     return _serialize(
-        {"rows": import_service.get_fas_rows(property_id, user_id=int(user["user_id"]))}
+        {"rows": import_service.get_fas_rows(property_id, user_id=ANONYMOUS_USER_ID)}
     )
 
 
@@ -177,7 +158,6 @@ async def get_fas_rows(property_id: int, user: dict = Depends(get_current_user))
 async def patch_fas_note(
     row_id: int,
     body: FasNoteRequest,
-    user: dict = Depends(get_current_user),
 ):
     from db.repository import import_repository
 
@@ -188,7 +168,7 @@ async def patch_fas_note(
 
 
 @router.get("/operations/report-operations/{property_id}/diagnostics")
-async def get_diagnostics(property_id: int, user: dict = Depends(get_current_user)):
+async def get_diagnostics(property_id: int):
     batches = import_service.get_history(property_id, limit=50)
     rows = import_service.get_diagnostic_rows(property_id)
     overrides = override_conflict_service.list_override_conflicts(property_id)
@@ -196,27 +176,23 @@ async def get_diagnostics(property_id: int, user: dict = Depends(get_current_use
 
 
 @router.get("/operations/admin/settings")
-async def get_admin_settings(user: dict = Depends(get_current_user)):
-    _require_admin(user)
+async def get_admin_settings():
     return {"enable_db_write": system_settings_service.get_enable_db_write()}
 
 
 @router.patch("/operations/admin/settings")
-async def patch_admin_settings(body: SettingsPatchRequest, user: dict = Depends(get_current_user)):
-    _require_admin(user)
+async def patch_admin_settings(body: SettingsPatchRequest):
     system_settings_service.set_enable_db_write(body.enable_db_write)
     return {"enable_db_write": system_settings_service.get_enable_db_write()}
 
 
 @router.post("/operations/admin/properties")
-async def create_property(body: CreatePropertyRequest, user: dict = Depends(get_current_user)):
+async def create_property(body: CreatePropertyRequest):
     logger.info(
-        "create_property:request username=%s role=%s body=%r",
-        user.get("username"),
-        user.get("role"),
+        "create_property:request actor=%s body=%r",
+        DEFAULT_ACTOR,
         body.model_dump(),
     )
-    _require_admin(user)
     try:
         property_row = property_service.create_property(body.name.strip())
     except WritesDisabledError as exc:
@@ -240,7 +216,7 @@ async def create_property(body: CreatePropertyRequest, user: dict = Depends(get_
 
 
 @router.get("/operations/admin/property-structure/{property_id}")
-async def get_property_structure(property_id: int, user: dict = Depends(get_current_user)):
+async def get_property_structure(property_id: int):
     phases = property_service.get_phases(property_id)
     structure: list[dict[str, Any]] = []
     for phase in phases:
@@ -264,49 +240,8 @@ async def get_property_structure(property_id: int, user: dict = Depends(get_curr
     return _serialize({"structure": structure})
 
 
-@router.get("/operations/admin/users")
-async def list_admin_users(user: dict = Depends(get_current_user)):
-    _require_admin(user)
-    try:
-        return _serialize({"rows": app_user_service.list_users()})
-    except AppUserError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
-
-
-@router.post("/operations/admin/users")
-async def create_admin_user(body: CreateUserRequest, user: dict = Depends(get_current_user)):
-    _require_admin(user)
-    try:
-        return _serialize(
-            app_user_service.create_user(
-                email=body.email,
-                role=body.role,
-                password=body.password or None,
-            )
-        )
-    except (AppUserError, WritesDisabledError) as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
-
-
-@router.patch("/operations/admin/users/{user_id}")
-async def patch_admin_user(
-    user_id: int, body: UpdateUserRequest, user: dict = Depends(get_current_user)
-):
-    _require_admin(user)
-    try:
-        if body.password is not None:
-            return _serialize(app_user_service.set_password(user_id, body.password))
-        if body.role is not None:
-            return _serialize(app_user_service.change_role(user_id, body.role))
-        if body.is_active is not None:
-            return _serialize(app_user_service.set_active(user_id, body.is_active))
-    except (AppUserError, WritesDisabledError) as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
-    raise HTTPException(status_code=400, detail="No update fields provided")
-
-
 @router.get("/operations/exports/{property_id}/manifest")
-async def get_export_manifest(property_id: int, user: dict = Depends(get_current_user)):
+async def get_export_manifest(property_id: int):
     return {
         "downloads": [
             {
@@ -352,9 +287,9 @@ def _build_export_parts(property_id: int, user_id: int) -> tuple[bytes, bytes, b
 
 
 @router.get("/operations/exports/{property_id}/download/{asset}")
-async def download_export(asset: str, property_id: int, user: dict = Depends(get_current_user)):
+async def download_export(asset: str, property_id: int):
     final_bytes, dmrb_bytes, chart_bytes, summary_bytes = _build_export_parts(
-        property_id, int(user["user_id"])
+        property_id, ANONYMOUS_USER_ID
     )
     if asset == "weekly-summary":
         return Response(
@@ -399,7 +334,6 @@ async def download_export(asset: str, property_id: int, user: dict = Depends(get
 async def validate_work_orders(
     property_id: int = Form(...),
     file: UploadFile = File(...),
-    user: dict = Depends(get_current_user),
 ):
     content = await file.read()
     try:
@@ -420,7 +354,6 @@ async def stream_ai_reply(
     property_id: int,
     message: str,
     history: str | None = None,
-    user: dict = Depends(get_current_user),
 ):
     try:
         parsed_history = json.loads(history) if history else []
@@ -434,7 +367,7 @@ async def stream_ai_reply(
 
     def event_stream():
         try:
-            context = build_context(property_id, user_id=int(user["user_id"]))
+            context = build_context(property_id, user_id=ANONYMOUS_USER_ID)
             reply = complete_chat(messages, app_context=context)
             for chunk in reply.split():
                 yield f"data: {json.dumps({'type': 'chunk', 'content': chunk + ' '})}\n\n"

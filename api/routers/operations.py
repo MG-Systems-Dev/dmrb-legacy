@@ -72,9 +72,9 @@ class CreatePropertyRequest(BaseModel):
 
 
 class CreateUserRequest(BaseModel):
-    username: str
-    password: str
+    email: str
     role: str
+    password: str | None = None
 
 
 class UpdateUserRequest(BaseModel):
@@ -279,9 +279,9 @@ async def create_admin_user(body: CreateUserRequest, user: dict = Depends(get_cu
     try:
         return _serialize(
             app_user_service.create_user(
-                username=body.username,
-                password=body.password,
+                email=body.email,
                 role=body.role,
+                password=body.password or None,
             )
         )
     except (AppUserError, WritesDisabledError) as exc:

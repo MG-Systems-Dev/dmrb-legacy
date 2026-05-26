@@ -6,11 +6,12 @@ import { AiAgentPage } from "./pages/AiAgentPage";
 import { BoardPage } from "./pages/BoardPage";
 import { FlagBridgePage } from "./pages/FlagBridgePage";
 import { LoginPage } from "./pages/LoginPage";
-import { SetupPage } from "./pages/SetupPage";
 import { MorningWorkflowPage } from "./pages/MorningWorkflowPage";
 import { OperationsSchedulePage } from "./pages/OperationsSchedulePage";
+import { RecoveryPage } from "./pages/RecoveryPage";
 import { ReportOperationsPage } from "./pages/ReportOperationsPage";
 import { RiskRadarPage } from "./pages/RiskRadarPage";
+import { SetupPage } from "./pages/SetupPage";
 import { TurnoverDetailPage } from "./pages/TurnoverDetailPage";
 import { UnitMasterPage } from "./pages/UnitMasterPage";
 
@@ -33,6 +34,10 @@ export const router = createBrowserRouter([
   {
     path: "/setup",
     element: <SetupPage />,
+  },
+  {
+    path: "/recovery",
+    element: <RecoveryPage />,
   },
   {
     element: (

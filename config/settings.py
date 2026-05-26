@@ -101,15 +101,22 @@ if IS_PRODUCTION and AUTH_DISABLED:
 
 if IS_PRODUCTION and SECRET_KEY == _DEFAULT_SECRET_KEY:
     sys.exit(
-        "[auth] SECRET_KEY (or SESSION_SECRET) must be set to a strong random value in production. "
+        "[auth] SESSION_SECRET must be set to a strong random value in production. "
+        'Generate one with: python3 -c "import secrets; print(secrets.token_urlsafe(64))"'
+    )
+
+if not IS_PRODUCTION and SECRET_KEY == _DEFAULT_SECRET_KEY:
+    logger.warning(
+        "[auth] SESSION_SECRET is using the placeholder default value. "
+        "Set SESSION_SECRET to a strong random value in your .env file. "
         'Generate one with: python3 -c "import secrets; print(secrets.token_urlsafe(64))"'
     )
 
 logger.info(
-    "Auth env: SETUP_KEY=%s SECRET_KEY=%s DATABASE_URL=%s",
-    "set" if SETUP_KEY else "missing",
-    "default" if SECRET_KEY == _DEFAULT_SECRET_KEY else "set",
-    "set" if DATABASE_URL else "missing",
+    "Auth env: SETUP_KEY=%s SESSION_SECRET=%s DATABASE_URL=%s",
+    "SET" if SETUP_KEY else "MISSING",
+    "placeholder/default" if SECRET_KEY == _DEFAULT_SECRET_KEY else "SET",
+    "SET" if DATABASE_URL else "MISSING",
 )
 
 

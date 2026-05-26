@@ -6,6 +6,7 @@ import re
 
 from argon2 import PasswordHasher
 from argon2.exceptions import VerifyMismatchError
+from psycopg2 import errors as pg_errors
 
 from config.settings import AUTH_DISABLED, SETUP_KEY
 from db.connection import transaction
@@ -70,13 +71,16 @@ def setup_claim_admin(email: str, password: str) -> dict:
         raise ValueError("password_too_short")
     if len(password) > PASSWORD_MAX:
         raise ValueError("password_too_long")
-    with transaction():
-        user_repository.acquire_bootstrap_advisory_lock()
-        if user_repository.has_claimed_admin():
-            raise ValueError("already_claimed")
-        ph = hash_password(password)
-        row = user_repository.insert(email, ph, "admin")
-        user_repository.set_claimed_at(row["user_id"])
+    try:
+        with transaction():
+            user_repository.acquire_bootstrap_advisory_lock()
+            if user_repository.has_claimed_admin():
+                raise ValueError("already_claimed")
+            ph = hash_password(password)
+            row = user_repository.insert(email, ph, "admin")
+            user_repository.set_claimed_at(row["user_id"])
+    except pg_errors.UniqueViolation:
+        raise ValueError("email_taken")
     logger.info("setup_success email=%s", email)
     return {
         "user_id": row["user_id"],

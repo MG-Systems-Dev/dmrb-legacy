@@ -68,15 +68,6 @@ def get_bootstrap_status_payload() -> dict:
             "allow_api_bootstrap": allow,
             "reason": "users_exist",
         }
-    if IS_PRODUCTION and not allow and user_count > 0:
-        return {
-            "needs_bootstrap": False,
-            "user_count": 0,
-            "auth_disabled": False,
-            "is_production": True,
-            "allow_api_bootstrap": False,
-            "reason": "production_requires_ALLOW_API_BOOTSTRAP",
-        }
     return {
         "needs_bootstrap": True,
         "user_count": 0,

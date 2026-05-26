@@ -1,28 +1,27 @@
 import { FormEvent, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import { AUTH_BOOTSTRAP_QUERY_KEY, bootstrapAdmin, getBootstrapStatus } from "../api/auth";
+import { AUTH_SETUP_QUERY_KEY, claimSetup } from "../api/auth";
 import { useAuthStore } from "../stores/useAuth";
+
+const MIN_PASSWORD = 12;
 
 export function SetupPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const setSession = useAuthStore((state) => state.setSession);
 
-  const statusQuery = useQuery({
-    queryKey: AUTH_BOOTSTRAP_QUERY_KEY,
-    queryFn: getBootstrapStatus,
-  });
-
-  const [username, setUsername] = useState("");
+  const [setupKey, setSetupKey] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [passwordConfirm, setPasswordConfirm] = useState("");
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   const mutation = useMutation({
-    mutationFn: bootstrapAdmin,
+    mutationFn: claimSetup,
     onSuccess: (user) => {
-      void queryClient.invalidateQueries({ queryKey: AUTH_BOOTSTRAP_QUERY_KEY });
+      void queryClient.invalidateQueries({ queryKey: AUTH_SETUP_QUERY_KEY });
       void queryClient.invalidateQueries({ queryKey: ["auth", "me"] });
       setSession({ user });
       toast.success("Admin account created — you're signed in");
@@ -34,117 +33,127 @@ export function SetupPage() {
     },
   });
 
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const u = username.trim();
-    if (!u) {
-      toast.error("Enter a username");
-      return;
+  const validate = (): boolean => {
+    const errors: Record<string, string> = {};
+    if (!setupKey.trim()) errors.setupKey = "Setup key is required.";
+    if (!email.trim()) {
+      errors.email = "Email is required.";
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      errors.email = "Enter a valid email address.";
     }
-    if (password.length < 8) {
-      toast.error("Password must be at least 8 characters");
-      return;
+    if (password.length < MIN_PASSWORD) {
+      errors.password = `Password must be at least ${MIN_PASSWORD} characters.`;
     }
     if (password !== passwordConfirm) {
-      toast.error("Passwords do not match");
-      return;
+      errors.passwordConfirm = "Passwords do not match.";
     }
+    setFieldErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
+  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!validate()) return;
     mutation.mutate({
-      username: u,
+      setup_key: setupKey.trim(),
+      email: email.trim().toLowerCase(),
       password,
       password_confirm: passwordConfirm,
     });
   };
 
-  if (statusQuery.isLoading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-canvas px-4">
-        <p className="text-sm text-muted">Loading…</p>
-      </div>
-    );
-  }
-
-  if (statusQuery.isError) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-canvas px-4">
-        <p className="text-sm text-red-200">Could not load setup status.</p>
-      </div>
-    );
-  }
-
-  if (!statusQuery.data?.needs_bootstrap) {
-    const d = statusQuery.data;
-    let hint = "Setup is not available. Use sign in, or check server config.";
-    if (d?.reason === "auth_disabled") {
-      hint =
-        "API auth is disabled (AUTH_DISABLED). First-run setup is not offered; the API runs without normal login.";
-    } else if (d?.reason === "users_exist") {
-      hint = `An account already exists in the database (user count: ${d.user_count}).`;
-    } else if (d?.reason === "production_requires_ALLOW_API_BOOTSTRAP") {
-      hint =
-        "Production mode blocks bootstrap unless ALLOW_API_BOOTSTRAP is set, or set IS_PRODUCTION false for local.";
-    } else if (d?.reason === "user_count_error") {
-      hint = "Could not read the app_user table; check the database connection.";
-    }
-    return (
-      <div className="mx-auto max-w-md px-4 py-10 text-center">
-        <p className="text-sm text-muted">{hint}</p>
-        <p className="mt-2 text-left text-xs text-muted/80 font-mono">
-          needs_bootstrap=false · count={d?.user_count ?? "?"}
-          {d?.is_production ? " · production" : ""}
-          {d?.allow_api_bootstrap ? " · allow_bootstrap" : ""}
-        </p>
-        <button type="button" className="btn-primary mt-4" onClick={() => navigate("/login", { replace: true })}>
-          Go to sign in
-        </button>
-      </div>
-    );
-  }
-
   return (
     <div className="flex min-h-screen items-center justify-center bg-canvas px-4 py-10">
       <div className="w-full max-w-md rounded-2xl border border-border bg-surface p-8 shadow-panel">
         <p className="text-[11px] font-medium uppercase tracking-[0.24em] text-muted">DMRB</p>
-        <h1 className="mt-3 text-2xl font-semibold tracking-tight text-text-strong">Create admin account</h1>
-        <p className="mt-2 text-sm text-muted">First-time setup. Choose your username and password (enter the password twice).</p>
+        <h1 className="mt-3 text-2xl font-semibold tracking-tight text-text-strong">
+          Create admin account
+        </h1>
+        <p className="mt-2 text-sm text-muted">
+          First-time setup. Enter your setup key, then choose your email and password.
+        </p>
 
-        <form className="mt-8 space-y-4" onSubmit={handleSubmit}>
-          <label className="block">
-            <span className="label">Admin username</span>
-            <input
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              className="input"
-              autoComplete="username"
-              required
-            />
-          </label>
-          <label className="block">
-            <span className="label">Password</span>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="input"
-              autoComplete="new-password"
-              minLength={8}
-              required
-            />
-          </label>
-          <label className="block">
-            <span className="label">Confirm password</span>
-            <input
-              type="password"
-              value={passwordConfirm}
-              onChange={(e) => setPasswordConfirm(e.target.value)}
-              className="input"
-              autoComplete="new-password"
-              minLength={8}
-              required
-            />
-          </label>
-          <p className="text-xs text-muted">Minimum 8 characters. Your account is stored in the database (<code className="text-text">app_user</code> table).</p>
-          <button type="submit" disabled={mutation.isPending} className="btn-primary w-full">
+        <form className="mt-8 space-y-4" onSubmit={handleSubmit} noValidate>
+          <div>
+            <label className="block">
+              <span className="label">Setup key</span>
+              <input
+                type="password"
+                value={setupKey}
+                onChange={(e) => setSetupKey(e.target.value)}
+                className="input"
+                autoComplete="off"
+                required
+              />
+            </label>
+            {fieldErrors.setupKey && (
+              <p className="mt-1 text-xs text-red-400">{fieldErrors.setupKey}</p>
+            )}
+          </div>
+
+          <div>
+            <label className="block">
+              <span className="label">Email</span>
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="input"
+                autoComplete="email"
+                required
+              />
+            </label>
+            {fieldErrors.email && (
+              <p className="mt-1 text-xs text-red-400">{fieldErrors.email}</p>
+            )}
+          </div>
+
+          <div>
+            <label className="block">
+              <span className="label">Password</span>
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="input"
+                autoComplete="new-password"
+                minLength={MIN_PASSWORD}
+                required
+              />
+            </label>
+            {fieldErrors.password && (
+              <p className="mt-1 text-xs text-red-400">{fieldErrors.password}</p>
+            )}
+          </div>
+
+          <div>
+            <label className="block">
+              <span className="label">Confirm password</span>
+              <input
+                type="password"
+                value={passwordConfirm}
+                onChange={(e) => setPasswordConfirm(e.target.value)}
+                className="input"
+                autoComplete="new-password"
+                minLength={MIN_PASSWORD}
+                required
+              />
+            </label>
+            {fieldErrors.passwordConfirm && (
+              <p className="mt-1 text-xs text-red-400">{fieldErrors.passwordConfirm}</p>
+            )}
+          </div>
+
+          <p className="text-xs text-muted">
+            Minimum {MIN_PASSWORD} characters. Your account is stored in the{" "}
+            <code className="text-text">app_user</code> table.
+          </p>
+
+          <button
+            type="submit"
+            disabled={mutation.isPending}
+            className="btn-primary w-full"
+          >
             {mutation.isPending ? "Saving…" : "Create account & sign in"}
           </button>
         </form>

@@ -1,8 +1,10 @@
 import axios from "axios";
 import { useAuthStore } from "../stores/useAuth";
 
+const baseURL = import.meta.env.VITE_API_URL || "/api";
+
 export const api = axios.create({
-  baseURL: "/api",
+  baseURL,
   withCredentials: true,
 });
 
@@ -28,7 +30,7 @@ api.interceptors.response.use(
       if (path === "/login" || path === "/setup") {
         return Promise.reject(error);
       }
-      if (reqUrl === "/auth/me" || reqUrl === "/auth/bootstrap-status") {
+      if (reqUrl === "/auth/me" || reqUrl === "/auth/setup-status") {
         return Promise.reject(error);
       }
 

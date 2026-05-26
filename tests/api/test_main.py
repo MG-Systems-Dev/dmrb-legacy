@@ -42,7 +42,7 @@ def test_root_serves_index_when_frontend_exists(main_module, monkeypatch, tmp_pa
     response = main_module.serve_spa_index()
 
     assert isinstance(response, FileResponse)
-    assert response.path == str(index_html)
+    assert response.path == index_html
 
 
 def test_spa_route_404s_when_frontend_missing(main_module, monkeypatch, tmp_path):

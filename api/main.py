@@ -205,8 +205,8 @@ def _frontend_status() -> dict[str, bool]:
     }
 
 
-@app.get("/")
-def serve_spa_index() -> FileResponse | JSONResponse:
+@app.get("/", response_model=None)
+def serve_spa_index() -> Response:
     if not FRONTEND_INDEX.is_file():
         return JSONResponse({"status": "ok", **_frontend_status()})
     return FileResponse(FRONTEND_INDEX, media_type="text/html")

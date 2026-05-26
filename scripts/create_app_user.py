@@ -24,6 +24,12 @@ if str(ROOT) not in sys.path:
 
 
 def main() -> int:
+    print(
+        "⚠️  Deprecated for first-admin setup. "
+        "Use the /setup UI with SETUP_KEY instead. "
+        "This script is kept for emergency/secondary-user creation only.",
+        file=sys.stderr,
+    )
     parser = argparse.ArgumentParser(description="Insert an app_user with hashed password.")
     parser.add_argument("--username", required=True, help="Login name (stored lowercased)")
     parser.add_argument(

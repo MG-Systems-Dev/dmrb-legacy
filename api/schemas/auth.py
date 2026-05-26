@@ -1,21 +1,32 @@
 from __future__ import annotations
 
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr
 
 
 class LoginRequest(BaseModel):
-    username: str
+    email: str
     password: str
 
 
-class BootstrapRequest(BaseModel):
-    username: str
+class SetupRequest(BaseModel):
+    setup_key: str
+    email: EmailStr
     password: str
     password_confirm: str
+
+
+class RecoveryRequest(BaseModel):
+    setup_key: str
+    password: str
+    password_confirm: str
+
+
+class SetupStatusResponse(BaseModel):
+    needs_setup: bool
+    reason: str
 
 
 class UserSession(BaseModel):
     user_id: int
     username: str
     role: str
-    exp: int

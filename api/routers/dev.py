@@ -1,17 +1,18 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, Response
+from fastapi import APIRouter, HTTPException, Request, Response
 
 from api.schemas.dev import DevResetAdminRequest
-from api.session_cookie import set_session_cookie
+from api.session_store import create_session
 from config.settings import allow_dev_reset_admin_endpoint
 from services import auth_service
+from services.auth_service import PASSWORD_MIN
 
 router = APIRouter(prefix="/dev", tags=["dev"])
 
 
 @router.post("/reset-admin")
-async def reset_admin(request: DevResetAdminRequest, response: Response):
+async def reset_admin(http_request: Request, request: DevResetAdminRequest, response: Response):
     """Wipe ``app_user`` and create a single admin (non-production only)."""
     if not allow_dev_reset_admin_endpoint():
         raise HTTPException(
@@ -32,11 +33,12 @@ async def reset_admin(request: DevResetAdminRequest, response: Response):
             raise HTTPException(status_code=400, detail="Password is required.") from e
         if code == "password_too_short":
             raise HTTPException(
-                status_code=400, detail="Password must be at least 8 characters."
+                status_code=400,
+                detail=f"Password must be at least {PASSWORD_MIN} characters.",
             ) from e
         raise HTTPException(status_code=400, detail="Could not reset admin user.") from e
 
-    set_session_cookie(response, result)
+    create_session(response, result)
     return {
         "status": "ok",
         "username": result["username"],

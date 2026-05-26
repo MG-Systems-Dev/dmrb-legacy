@@ -1,46 +1,34 @@
 import { FormEvent, useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import { AUTH_SETUP_QUERY_KEY, claimSetup } from "../api/auth";
-import { useAuthStore } from "../stores/useAuth";
+import { recoveryReset } from "../api/auth";
 
 const MIN_PASSWORD = 12;
 
-export function SetupPage() {
+export function RecoveryPage() {
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
-  const setSession = useAuthStore((state) => state.setSession);
 
   const [setupKey, setSetupKey] = useState("");
-  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [passwordConfirm, setPasswordConfirm] = useState("");
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   const mutation = useMutation({
-    mutationFn: claimSetup,
-    onSuccess: (user) => {
-      void queryClient.invalidateQueries({ queryKey: AUTH_SETUP_QUERY_KEY });
-      void queryClient.invalidateQueries({ queryKey: ["auth", "me"] });
-      setSession({ user });
-      toast.success("Admin account created — you're signed in");
-      navigate("/board", { replace: true });
+    mutationFn: recoveryReset,
+    onSuccess: () => {
+      toast.success("Password reset. Please sign in.");
+      navigate("/login", { replace: true });
     },
     onError: (err: { response?: { data?: { detail?: string } } }) => {
       const detail = err?.response?.data?.detail;
-      toast.error(typeof detail === "string" ? detail : "Setup failed");
+      toast.error(typeof detail === "string" ? detail : "Recovery failed");
     },
   });
 
   const validate = (): boolean => {
     const errors: Record<string, string> = {};
     if (!setupKey.trim()) errors.setupKey = "Setup key is required.";
-    if (!email.trim()) {
-      errors.email = "Email is required.";
-    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      errors.email = "Enter a valid email address.";
-    }
     if (password.length < MIN_PASSWORD) {
       errors.password = `Password must be at least ${MIN_PASSWORD} characters.`;
     }
@@ -56,7 +44,6 @@ export function SetupPage() {
     if (!validate()) return;
     mutation.mutate({
       setup_key: setupKey.trim(),
-      email: email.trim().toLowerCase(),
       password,
       password_confirm: passwordConfirm,
     });
@@ -67,10 +54,10 @@ export function SetupPage() {
       <div className="w-full max-w-md rounded-2xl border border-border bg-surface p-8 shadow-panel">
         <p className="text-[11px] font-medium uppercase tracking-[0.24em] text-muted">DMRB</p>
         <h1 className="mt-3 text-2xl font-semibold tracking-tight text-text-strong">
-          Create admin account
+          Reset admin password
         </h1>
         <p className="mt-2 text-sm text-muted">
-          First-time setup. Enter your setup key, then choose your email and password.
+          Enter your setup key and choose a new password for the admin account.
         </p>
 
         <form className="mt-8 space-y-4" onSubmit={handleSubmit} noValidate>
@@ -93,24 +80,7 @@ export function SetupPage() {
 
           <div>
             <label className="block">
-              <span className="label">Email</span>
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="input"
-                autoComplete="email"
-                required
-              />
-            </label>
-            {fieldErrors.email && (
-              <p className="mt-1 text-xs text-red-400">{fieldErrors.email}</p>
-            )}
-          </div>
-
-          <div>
-            <label className="block">
-              <span className="label">Password</span>
+              <span className="label">New password</span>
               <input
                 type="password"
                 value={password}
@@ -128,7 +98,7 @@ export function SetupPage() {
 
           <div>
             <label className="block">
-              <span className="label">Confirm password</span>
+              <span className="label">Confirm new password</span>
               <input
                 type="password"
                 value={passwordConfirm}
@@ -144,18 +114,22 @@ export function SetupPage() {
             )}
           </div>
 
-          <p className="text-xs text-muted">
-            Minimum {MIN_PASSWORD} characters. Your account is stored in the{" "}
-            <code className="text-text">app_user</code> table.
-          </p>
+          <p className="text-xs text-muted">Minimum {MIN_PASSWORD} characters.</p>
 
           <button
             type="submit"
             disabled={mutation.isPending}
             className="btn-primary w-full"
           >
-            {mutation.isPending ? "Saving…" : "Create account & sign in"}
+            {mutation.isPending ? "Resetting…" : "Reset password"}
           </button>
+
+          <p className="text-center text-xs text-muted">
+            Remembered your password?{" "}
+            <a href="/login" className="text-text underline underline-offset-2">
+              Sign in
+            </a>
+          </p>
         </form>
       </div>
     </div>

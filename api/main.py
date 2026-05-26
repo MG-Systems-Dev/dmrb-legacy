@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import logging
+import os
+import time
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request, Response
@@ -53,17 +55,69 @@ async def _apply_migrations() -> None:
     from db.migration_runner import ensure_database_ready
     from db.repository import session_repository
 
+    db_url = os.getenv("DATABASE_URL", "")
+    if db_url:
+        try:
+            from urllib.parse import urlparse
+
+            parsed = urlparse(db_url)
+            safe_url = f"{parsed.scheme}://***@{parsed.hostname}:{parsed.port}{parsed.path}"
+        except Exception:
+            safe_url = "<unparseable>"
+        logger.info("DATABASE_URL is set — connecting to: %s", safe_url)
+    else:
+        logger.error(
+            "DATABASE_URL is not set — database operations will fail. "
+            "Add the DATABASE_URL environment variable and redeploy."
+        )
+
+    started = time.monotonic()
     try:
         ensure_database_ready()
-        logger.info("Database migrations applied successfully")
+        elapsed_ms = (time.monotonic() - started) * 1000
+        logger.info("Database migrations applied successfully (%.0f ms)", elapsed_ms)
         deleted = session_repository.delete_expired()
         if deleted:
             logger.info("Cleaned up %d expired sessions", deleted)
     except Exception as exc:
+        elapsed_ms = (time.monotonic() - started) * 1000
         logger.error(
-            "Database migration on startup failed (app will start anyway "
-            "so /healthz responds; set DATABASE_URL and redeploy): %s",
+            "Database migration on startup failed after %.0f ms "
+            "(app will start anyway so /healthz responds; set DATABASE_URL "
+            "and redeploy): [%s] %s",
+            elapsed_ms,
+            type(exc).__name__,
             exc,
+        )
+
+
+@app.on_event("startup")
+async def _check_frontend_dist() -> None:
+    frontend_dist = Path("frontend/dist")
+    if not frontend_dist.exists():
+        logger.error(
+            "Frontend dist directory does not exist at '%s' (cwd: %s). "
+            "The SPA will not be served. Run the frontend build step.",
+            frontend_dist.resolve(),
+            Path.cwd(),
+        )
+        return
+
+    files = list(frontend_dist.rglob("*"))
+    html_files = [f for f in files if f.suffix == ".html"]
+    js_files = [f for f in files if f.suffix == ".js"]
+    logger.info(
+        "Frontend dist directory found at '%s': %d total files, %d HTML, %d JS",
+        frontend_dist.resolve(),
+        len(files),
+        len(html_files),
+        len(js_files),
+    )
+    index_html = frontend_dist / "index.html"
+    if not index_html.exists():
+        logger.error(
+            "index.html is missing from '%s' — the SPA will not load correctly.",
+            frontend_dist.resolve(),
         )
 
 
@@ -71,6 +125,24 @@ async def _apply_migrations() -> None:
 async def healthz():
     """Public, unauthenticated liveness probe for Railway health checks."""
     return {"status": "ok"}
+
+
+@app.exception_handler(Exception)
+async def _unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    request_id = getattr(request.state, "request_id", "-")
+    logger.error(
+        "Unhandled exception during %s %s (request_id=%s): [%s] %s",
+        request.method,
+        request.url.path,
+        request_id,
+        type(exc).__name__,
+        exc,
+        exc_info=True,
+    )
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Internal server error", "request_id": request_id},
+    )
 
 
 app.add_middleware(RequestIDMiddleware)
@@ -106,15 +178,15 @@ app.include_router(phase_scope.router, prefix="/api", tags=["phase-scope"])
 app.include_router(unit_master.router, prefix="/api")
 
 frontend_dist = Path("frontend/dist")
-if not frontend_dist.exists():
-    raise RuntimeError(
-        "Missing React build at frontend/dist. Run the frontend build before starting FastAPI."
-    )
-
 FRONTEND_INDEX = frontend_dist / "index.html"
 ASSETS_DIR = frontend_dist / "assets"
 if ASSETS_DIR.is_dir():
     app.mount("/assets", StaticFiles(directory=ASSETS_DIR), name="static-assets")
+elif not frontend_dist.exists():
+    logger.warning(
+        "Frontend build not found at frontend/dist — serving API only. "
+        "Check build logs for TypeScript/Vite errors."
+    )
 
 
 def _is_safe_file_under_dist(candidate: Path) -> bool:
@@ -126,8 +198,17 @@ def _is_safe_file_under_dist(candidate: Path) -> bool:
     return candidate.is_file()
 
 
-@app.get("/")
-def serve_spa_index() -> FileResponse:
+def _frontend_status() -> dict[str, bool]:
+    return {
+        "frontend_dist_exists": frontend_dist.exists(),
+        "index_html_exists": FRONTEND_INDEX.is_file(),
+    }
+
+
+@app.get("/", response_model=None)
+def serve_spa_index() -> Response:
+    if not FRONTEND_INDEX.is_file():
+        return JSONResponse({"status": "ok", **_frontend_status()})
     return FileResponse(FRONTEND_INDEX, media_type="text/html")
 
 
@@ -138,6 +219,8 @@ def serve_spa_routes(full_path: str) -> FileResponse:
     candidate = frontend_dist / full_path
     if _is_safe_file_under_dist(candidate):
         return FileResponse(candidate)
+    if not FRONTEND_INDEX.is_file():
+        raise HTTPException(status_code=404, detail="Frontend build not available")
     return FileResponse(FRONTEND_INDEX, media_type="text/html")
 
 
@@ -173,12 +256,12 @@ async def api_logout(request: Request, response: Response):
 async def _404_handler(request: Request, exc: HTTPException):
     if request.url.path.startswith("/api/"):
         return JSONResponse(status_code=404, content={"detail": "Not found"})
+    if not FRONTEND_INDEX.is_file():
+        return JSONResponse(status_code=404, content={"detail": "Frontend build not available"})
     return FileResponse(FRONTEND_INDEX, media_type="text/html")
 
 
 if __name__ == "__main__":
-    import os
-
     import uvicorn
 
     uvicorn.run(

@@ -22,12 +22,26 @@ def delete_all() -> int:
         return int(cur.rowcount)
 
 
-# Distinct key for first-admin bootstrap (serialized with pg_advisory_xact_lock).
+def has_claimed_admin() -> bool:
+    """True if at least one admin row has claimed_at set (setup has been completed)."""
+    with get_connection() as conn, conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT EXISTS (
+                SELECT 1 FROM app_user
+                WHERE role = 'admin' AND claimed_at IS NOT NULL
+            )
+            """
+        )
+        return bool(cur.fetchone()[0])
+
+
+# Distinct key for first-admin claim (serialized with pg_advisory_xact_lock).
 _BOOTSTRAP_ADVISORY_KEY = 584_291_738
 
 
 def acquire_bootstrap_advisory_lock() -> None:
-    """Hold for the rest of the current transaction; serializes bootstrap vs other writers."""
+    """Hold for the rest of the current transaction; serializes claim vs other writers."""
     with get_connection() as conn, conn.cursor() as cur:
         cur.execute("SELECT pg_advisory_xact_lock(%s)", (_BOOTSTRAP_ADVISORY_KEY,))
 
@@ -46,12 +60,17 @@ def get_active_by_username(username: str) -> dict | None:
         return cur.fetchone()
 
 
+def get_active_by_email(email: str) -> dict | None:
+    """Alias for get_active_by_username — emails are stored in the username column."""
+    return get_active_by_username(email)
+
+
 def list_all_for_admin() -> list[dict]:
     """All users for admin UI (no password_hash)."""
     with get_connection() as conn, conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(
             """
-            SELECT user_id, username, role, is_active, created_at, updated_at
+            SELECT user_id, username, role, is_active, claimed_at, created_at, updated_at
             FROM app_user
             ORDER BY username
             """
@@ -72,7 +91,7 @@ def get_by_id(user_id: int) -> dict | None:
         return cur.fetchone()
 
 
-def insert(username: str, password_hash: str, role: str) -> dict:
+def insert(username: str, password_hash: str | None, role: str) -> dict:
     key = normalize_username(username)
     with get_connection() as conn, conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(
@@ -84,6 +103,15 @@ def insert(username: str, password_hash: str, role: str) -> dict:
             (key, password_hash, role),
         )
         return cur.fetchone()
+
+
+def set_claimed_at(user_id: int) -> None:
+    """Mark an admin as having completed first-time setup (sets claimed_at = NOW())."""
+    with get_connection() as conn, conn.cursor() as cur:
+        cur.execute(
+            "UPDATE app_user SET claimed_at = NOW() WHERE user_id = %s",
+            (user_id,),
+        )
 
 
 def update_password_hash(user_id: int, password_hash: str) -> dict | None:

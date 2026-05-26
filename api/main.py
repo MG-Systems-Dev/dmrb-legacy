@@ -1,11 +1,18 @@
 from __future__ import annotations
+
 import logging
 from pathlib import Path
-from fastapi import FastAPI, Response, HTTPException
-from fastapi.responses import FileResponse
+
+from fastapi import FastAPI, HTTPException, Request, Response
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
-from api.middleware.request_id import RequestIDMiddleware
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+
 from api.middleware.auth import AuthMiddleware
+from api.middleware.request_id import RequestIDMiddleware
+from api.rate_limit import limiter
 from api.routers import (
     auth,
     board,
@@ -22,13 +29,15 @@ from api.routers import (
     units,
 )
 from api.schemas.auth import LoginRequest
-from api.session_cookie import clear_session_cookie, set_session_cookie
+from api.session_store import clear_session, create_session
 from config import settings
 from services import auth_service
 
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title="DMRB Legacy API")
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 
 @app.on_event("startup")
@@ -42,10 +51,14 @@ async def _apply_migrations() -> None:
     unreachable.
     """
     from db.migration_runner import ensure_database_ready
+    from db.repository import session_repository
 
     try:
         ensure_database_ready()
         logger.info("Database migrations applied successfully")
+        deleted = session_repository.delete_expired()
+        if deleted:
+            logger.info("Cleaned up %d expired sessions", deleted)
     except Exception as exc:
         logger.error(
             "Database migration on startup failed (app will start anyway "
@@ -62,6 +75,17 @@ async def healthz():
 
 app.add_middleware(RequestIDMiddleware)
 app.add_middleware(AuthMiddleware)
+
+_cors_origins = settings.cors_allowed_origins()
+if _cors_origins:
+    # Outermost: answer OPTIONS and attach ACAO before auth runs.
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=_cors_origins,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
 # JSON API routes
 app.include_router(auth.router, prefix="/api", tags=["auth"])
@@ -83,7 +107,9 @@ app.include_router(unit_master.router, prefix="/api")
 
 frontend_dist = Path("frontend/dist")
 if not frontend_dist.exists():
-    raise RuntimeError("Missing React build at frontend/dist. Run the frontend build before starting FastAPI.")
+    raise RuntimeError(
+        "Missing React build at frontend/dist. Run the frontend build before starting FastAPI."
+    )
 
 FRONTEND_INDEX = frontend_dist / "index.html"
 ASSETS_DIR = frontend_dist / "assets"
@@ -116,25 +142,45 @@ def serve_spa_routes(full_path: str) -> FileResponse:
 
 
 @app.post("/api/login", tags=["auth"])
-async def api_login(request: LoginRequest, response: Response):
-    """JSON login endpoint for API clients."""
-    result = auth_service.authenticate(request.username, request.password)
+@limiter.limit("20/15minutes")
+async def api_login(request: Request, body: LoginRequest, response: Response):
+    """JSON login endpoint for the SPA."""
+    try:
+        result = auth_service.authenticate(body.email, body.password)
+    except ValueError as exc:
+        if str(exc) == "password_not_set":
+            raise HTTPException(
+                status_code=401,
+                detail="Password has not been set yet. Ask an admin or use the recovery flow.",
+            ) from exc
+        raise HTTPException(status_code=401, detail="Invalid email or password.") from exc
+
     if not result:
-        raise HTTPException(status_code=401, detail="Invalid username or password")
-    set_session_cookie(response, result)
+        raise HTTPException(status_code=401, detail="Invalid email or password.")
+
+    create_session(response, result)
     return {"status": "ok"}
 
 
 @app.post("/api/logout", tags=["auth"])
-async def api_logout(response: Response):
-    """JSON logout endpoint for API clients."""
-    clear_session_cookie(response)
+async def api_logout(request: Request, response: Response):
+    """JSON logout endpoint for the SPA."""
+    clear_session(request, response)
     return {"status": "ok"}
+
+
+@app.exception_handler(404)
+async def _404_handler(request: Request, exc: HTTPException):
+    if request.url.path.startswith("/api/"):
+        return JSONResponse(status_code=404, content={"detail": "Not found"})
+    return FileResponse(FRONTEND_INDEX, media_type="text/html")
 
 
 if __name__ == "__main__":
     import os
+
     import uvicorn
+
     uvicorn.run(
         "api.main:app",
         host="0.0.0.0",

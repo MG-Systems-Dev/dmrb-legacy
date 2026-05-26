@@ -2,19 +2,19 @@ import { FormEvent, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useLocation, useNavigate, Navigate } from "react-router-dom";
 import { toast } from "sonner";
-import { AUTH_BOOTSTRAP_QUERY_KEY, getBootstrapStatus, login } from "../api/auth";
+import { AUTH_SETUP_QUERY_KEY, getSetupStatus, login } from "../api/auth";
 import { useAuthStore } from "../stores/useAuth";
 
 export function LoginPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const setSession = useAuthStore((state) => state.setSession);
-  const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
-  const bootstrapQuery = useQuery({
-    queryKey: AUTH_BOOTSTRAP_QUERY_KEY,
-    queryFn: getBootstrapStatus,
+  const setupQuery = useQuery({
+    queryKey: AUTH_SETUP_QUERY_KEY,
+    queryFn: getSetupStatus,
     staleTime: 30_000,
   });
 
@@ -28,17 +28,18 @@ export function LoginPage() {
       toast.success("Signed in");
       navigate(next, { replace: true });
     },
-    onError: () => {
-      toast.error("Invalid username or password");
+    onError: (err: { response?: { data?: { detail?: string } } }) => {
+      const detail = err?.response?.data?.detail;
+      toast.error(typeof detail === "string" ? detail : "Invalid email or password");
     },
   });
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    mutation.mutate({ username, password });
+    mutation.mutate({ email: email.trim().toLowerCase(), password });
   };
 
-  if (bootstrapQuery.data?.needs_bootstrap) {
+  if (setupQuery.data?.needs_setup) {
     return <Navigate to="/setup" replace />;
   }
 
@@ -51,18 +52,17 @@ export function LoginPage() {
         <h1 className="mt-3 text-2xl font-semibold tracking-tight text-text-strong">
           Sign in
         </h1>
-        <p className="mt-2 text-sm text-muted">
-          Sign in to continue.
-        </p>
+        <p className="mt-2 text-sm text-muted">Sign in to continue.</p>
 
         <form className="mt-8 space-y-4" onSubmit={handleSubmit}>
           <label className="block">
-            <span className="label">Username</span>
+            <span className="label">Email</span>
             <input
-              value={username}
-              onChange={(event) => setUsername(event.target.value)}
+              type="email"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
               className="input"
-              autoComplete="username"
+              autoComplete="email"
               required
             />
           </label>
@@ -82,9 +82,16 @@ export function LoginPage() {
             disabled={mutation.isPending}
             className="btn-primary w-full"
           >
-            {mutation.isPending ? "Signing in..." : "Sign In"}
+            {mutation.isPending ? "Signing in…" : "Sign in"}
           </button>
         </form>
+
+        <p className="mt-6 text-center text-xs text-muted">
+          Locked out?{" "}
+          <a href="/recovery" className="text-text underline underline-offset-2">
+            Reset admin password
+          </a>
+        </p>
       </div>
     </div>
   );

@@ -85,6 +85,13 @@ def get_connection():
     try:
         yield conn
     finally:
+        # Pooled connections must not be returned after a failed query without
+        # clearing the aborted-transaction state, or the next borrower gets
+        # InFailedSqlTransaction on unrelated SQL.
+        try:
+            conn.rollback()
+        except Exception:
+            pass
         pool.putconn(conn)
 
 
@@ -100,6 +107,9 @@ def transaction():
     _local.txn_conn = conn
     conn.autocommit = False
     try:
+        # Pool may hand back a connection whose previous use left it in
+        # aborted-transaction state; clear before starting this atomic block.
+        conn.rollback()
         yield conn
         conn.commit()
     except Exception:

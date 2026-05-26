@@ -36,6 +36,17 @@ export async function recoveryReset(payload: RecoveryPayload): Promise<void> {
   await api.post("/auth/recovery", payload);
 }
 
+export type ClaimPayload = {
+  email: string;
+  password: string;
+  password_confirm: string;
+};
+
+export async function claimAccount(payload: ClaimPayload): Promise<AuthUser> {
+  await api.post("/auth/claim", payload);
+  return getMe();
+}
+
 type LoginPayload = {
   email: string;
   password: string;

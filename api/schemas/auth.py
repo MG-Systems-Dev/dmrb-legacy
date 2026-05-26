@@ -21,6 +21,12 @@ class RecoveryRequest(BaseModel):
     password_confirm: str
 
 
+class ClaimRequest(BaseModel):
+    email: EmailStr
+    password: str
+    password_confirm: str
+
+
 class SetupStatusResponse(BaseModel):
     needs_setup: bool
     reason: str

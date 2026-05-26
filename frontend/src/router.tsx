@@ -8,6 +8,7 @@ import { FlagBridgePage } from "./pages/FlagBridgePage";
 import { LoginPage } from "./pages/LoginPage";
 import { MorningWorkflowPage } from "./pages/MorningWorkflowPage";
 import { OperationsSchedulePage } from "./pages/OperationsSchedulePage";
+import { ClaimPage } from "./pages/ClaimPage";
 import { RecoveryPage } from "./pages/RecoveryPage";
 import { ReportOperationsPage } from "./pages/ReportOperationsPage";
 import { RiskRadarPage } from "./pages/RiskRadarPage";
@@ -38,6 +39,10 @@ export const router = createBrowserRouter([
   {
     path: "/recovery",
     element: <RecoveryPage />,
+  },
+  {
+    path: "/claim",
+    element: <ClaimPage />,
   },
   {
     element: (

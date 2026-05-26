@@ -51,6 +51,12 @@ def delete(session_id: str) -> None:
         cur.execute("DELETE FROM api_session WHERE session_id = %s", (session_id,))
 
 
+def delete_by_user(user_id: int) -> None:
+    """Delete all sessions for a user (called before creating a new one on login)."""
+    with get_connection() as conn, conn.cursor() as cur:
+        cur.execute("DELETE FROM api_session WHERE user_id = %s", (user_id,))
+
+
 def delete_expired() -> int:
     """Delete all expired sessions and return the count removed."""
     with get_connection() as conn, conn.cursor() as cur:

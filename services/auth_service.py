@@ -118,6 +118,35 @@ def recovery_reset_admin_password(setup_key: str, password: str) -> None:
     logger.info("recovery_success")
 
 
+# ── New-user account claim ────────────────────────────────────────────────────
+
+
+def claim_account(email: str, password: str) -> dict:
+    """Let an admin-created user (no password yet) set their own password.
+
+    Gate: user must exist, be active, and have password_hash IS NULL.
+    Raises ValueError on any validation or state failure.
+    """
+    norm = email.strip().lower()
+    if len(password) < PASSWORD_MIN:
+        raise ValueError("password_too_short")
+    if len(password) > PASSWORD_MAX:
+        raise ValueError("password_too_long")
+    row = user_repository.get_unclaimed_by_email(norm)
+    if row is None:
+        raise ValueError("no_unclaimed_account")
+    ph = hash_password(password)
+    updated = user_repository.update_password_hash(row["user_id"], ph)
+    logger.info("claim_success email=%s role=%s", norm, row["role"])
+    role = updated["role"]
+    return {
+        "user_id": updated["user_id"],
+        "username": updated["username"],
+        "role": role,
+        "access_mode": "validator_only" if role == "validator" else "full",
+    }
+
+
 # ── Authentication ─────────────────────────────────────────────────────────────
 
 

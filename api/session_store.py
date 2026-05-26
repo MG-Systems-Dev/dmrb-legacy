@@ -19,7 +19,11 @@ SESSION_MAX_AGE = 7 * 24 * 3600  # 7 days
 
 
 def create_session(response: Response, user_dict: dict) -> str:
-    """Create a DB session row and set the opaque cookie on response."""
+    """Create a DB session row and set the opaque cookie on response.
+
+    Invalidates all prior sessions for the user before creating the new one.
+    """
+    session_repository.delete_by_user(user_dict["user_id"])
     expires_at = datetime.now(timezone.utc) + timedelta(seconds=SESSION_MAX_AGE)
     session_id = session_repository.create(user_dict["user_id"], expires_at)
     response.set_cookie(

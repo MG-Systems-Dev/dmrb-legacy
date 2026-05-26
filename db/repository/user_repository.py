@@ -65,6 +65,21 @@ def get_active_by_email(email: str) -> dict | None:
     return get_active_by_username(email)
 
 
+def get_unclaimed_by_email(email: str) -> dict | None:
+    """Return an active user whose password has not yet been set (admin-created, unclaimed)."""
+    key = normalize_username(email)
+    with get_connection() as conn, conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute(
+            """
+            SELECT user_id, username, role, is_active
+            FROM app_user
+            WHERE username = %s AND is_active = TRUE AND password_hash IS NULL
+            """,
+            (key,),
+        )
+        return cur.fetchone()
+
+
 def list_all_for_admin() -> list[dict]:
     """All users for admin UI (no password_hash)."""
     with get_connection() as conn, conn.cursor(cursor_factory=RealDictCursor) as cur:

@@ -14,6 +14,7 @@ _API_PUBLIC_PREFIXES = (
     "/api/auth/setup-status",
     "/api/auth/setup",
     "/api/auth/recovery",
+    "/api/auth/claim",
     # deprecated bootstrap aliases (return 410 in the router)
     "/api/auth/bootstrap-status",
     "/api/auth/bootstrap",
@@ -36,6 +37,7 @@ _PUBLIC_PATHS = frozenset(
         "/logout",
         "/setup",
         "/recovery",
+        "/claim",
         "/docs",
         "/openapi.json",
         "/api/docs",

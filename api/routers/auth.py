@@ -5,7 +5,7 @@ from fastapi.responses import JSONResponse
 
 from api.deps import get_current_user
 from api.rate_limit import limiter
-from api.schemas.auth import RecoveryRequest, SetupRequest, SetupStatusResponse
+from api.schemas.auth import ClaimRequest, RecoveryRequest, SetupRequest, SetupStatusResponse
 from api.session_store import create_session
 from services import auth_service
 from services.auth_service import PASSWORD_MAX, PASSWORD_MIN
@@ -67,6 +67,53 @@ async def claim_setup(request: Request, body: SetupRequest, response: Response):
         if code == "invalid_email_format":
             raise HTTPException(status_code=400, detail="Enter a valid email address.") from exc
         raise HTTPException(status_code=400, detail="Could not create admin account.") from exc
+
+    create_session(response, result)
+    return {"status": "ok", "email": result["username"]}
+
+
+# ── New-user account claim ─────────────────────────────────────────────────────
+
+
+@router.post("/auth/claim")
+@limiter.limit("10/15minutes")
+async def claim_account(request: Request, body: ClaimRequest, response: Response):
+    """Let an admin-created user (no password yet) set their own password and sign in."""
+    if body.password != body.password_confirm:
+        raise HTTPException(status_code=400, detail="Passwords do not match.")
+
+    if len(body.password) < PASSWORD_MIN:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Password must be at least {PASSWORD_MIN} characters.",
+        )
+
+    if len(body.password) > PASSWORD_MAX:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Password must be at most {PASSWORD_MAX} characters.",
+        )
+
+    try:
+        result = auth_service.claim_account(str(body.email), body.password)
+    except ValueError as exc:
+        code = str(exc)
+        if code == "no_unclaimed_account":
+            raise HTTPException(
+                status_code=404,
+                detail="No pending account found for that email. Contact your admin.",
+            ) from exc
+        if code == "password_too_short":
+            raise HTTPException(
+                status_code=400,
+                detail=f"Password must be at least {PASSWORD_MIN} characters.",
+            ) from exc
+        if code == "password_too_long":
+            raise HTTPException(
+                status_code=400,
+                detail=f"Password must be at most {PASSWORD_MAX} characters.",
+            ) from exc
+        raise HTTPException(status_code=400, detail="Could not claim account.") from exc
 
     create_session(response, result)
     return {"status": "ok", "email": result["username"]}

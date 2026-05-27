@@ -23,6 +23,10 @@ function AppLayout() {
 }
 
 export const router = createBrowserRouter([
+  { path: "/login", element: <Navigate to="/board" replace /> },
+  { path: "/setup", element: <Navigate to="/board" replace /> },
+  { path: "/claim", element: <Navigate to="/board" replace /> },
+  { path: "/recovery", element: <Navigate to="/board" replace /> },
   {
     element: <AppLayout />,
     children: [

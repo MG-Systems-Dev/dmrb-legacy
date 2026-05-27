@@ -157,6 +157,8 @@ app.include_router(unit_master.router, prefix="/api")
 frontend_dist = Path("frontend/dist")
 FRONTEND_INDEX = frontend_dist / "index.html"
 ASSETS_DIR = frontend_dist / "assets"
+# Former auth routes — permanent redirect so /login never serves the SPA shell.
+_LEGACY_AUTH_PATHS = frozenset({"login", "setup", "claim", "recovery"})
 if ASSETS_DIR.is_dir():
     app.mount("/assets", StaticFiles(directory=ASSETS_DIR), name="static-assets")
 elif not frontend_dist.exists():
@@ -190,7 +192,10 @@ def serve_spa_index() -> Response:
 
 
 @app.get("/{full_path:path}")
-def serve_spa_routes(full_path: str) -> FileResponse:
+def serve_spa_routes(full_path: str) -> FileResponse | RedirectResponse:
+    first_segment = full_path.split("/", 1)[0]
+    if first_segment in _LEGACY_AUTH_PATHS:
+        return RedirectResponse(url="/board", status_code=308)
     if full_path == "api" or full_path.startswith("api/"):
         raise HTTPException(status_code=404, detail="Not found")
     candidate = frontend_dist / full_path

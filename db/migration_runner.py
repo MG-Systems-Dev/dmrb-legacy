@@ -186,21 +186,6 @@ def ensure_database_ready() -> None:
                 encoding="utf-8"
             )
             cursor.execute(migration_011)
-        # Historical auth migration. Run only on fresh installs so 019 can
-        # normalize and drop the auth tables without recreating them every boot.
-        cursor.execute(
-            """
-            SELECT EXISTS (
-                SELECT 1
-                FROM information_schema.tables
-                WHERE table_schema = 'public'
-                  AND table_name = 'app_user'
-            )
-            """
-        )
-        if not cursor.fetchone()[0] and not initialized:
-            migration_012 = (_MIGRATIONS_DIR / "012_app_user.sql").read_text(encoding="utf-8")
-            cursor.execute(migration_012)
         # Apply migration 013 (wd_notified_at, wd_installed_at) if the columns are missing
         cursor.execute(
             """
@@ -289,29 +274,7 @@ def ensure_database_ready() -> None:
                 encoding="utf-8"
             )
             cursor.execute(migration_017)
-        # Historical auth migration. Existing auth tables are dropped by 019 below.
-        cursor.execute(
-            """
-            SELECT EXISTS (
-                SELECT 1
-                FROM information_schema.tables
-                WHERE table_schema = 'public'
-                  AND table_name = 'app_user'
-            )
-            AND NOT EXISTS (
-                SELECT 1
-                FROM information_schema.columns
-                WHERE table_schema = 'public'
-                  AND table_name = 'app_user'
-                  AND column_name = 'claimed_at'
-            )
-            """
-        )
-        if cursor.fetchone()[0]:
-            migration_018 = (_MIGRATIONS_DIR / "018_auth_claim_sessions.sql").read_text(
-                encoding="utf-8"
-            )
-            cursor.execute(migration_018)
+        # Drop legacy auth tables if they still exist from older deployments.
         # Apply migration 019 (drop auth tables) if either auth table still exists
         cursor.execute(
             """
